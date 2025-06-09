@@ -5,6 +5,11 @@ import { Calendar, Clock, AlertCircle, CheckCircle, XCircle, Edit, Trash2, MapPi
 import { Button } from '@/components/ui/button';
 import InteractiveMap from './InteractiveMap.vue';
 
+const props = defineProps<{
+  ocorrencias: any[];
+}>();
+
+
 interface Ponto {
   id: number;
   latitude: number;
@@ -33,7 +38,7 @@ const router = useRouter();
 const eventos = ref<Evento[]>([
   {
     id: 1,
-    tipo: 'Manutenção Preventiva',
+    tipo: 'Roubo de propriedade',
     status: 'pendente',
     dataInicio: '2024-03-25',
     dataFim: '2024-03-26',
@@ -42,7 +47,7 @@ const eventos = ref<Evento[]>([
   },
   {
     id: 2,
-    tipo: 'Inspeção de Equipamentos',
+    tipo: 'Alagamento',
     status: 'em_andamento',
     dataInicio: '2024-03-20',
     dataFim: '2024-03-22',
@@ -51,23 +56,18 @@ const eventos = ref<Evento[]>([
   },
   {
     id: 3,
-    tipo: 'Treinamento de Equipe',
+    tipo: 'Animais silvestres invasores',
     status: 'concluido',
     dataInicio: '2024-03-15',
     dataFim: '2024-03-16',
     pontos: [],
     poligonos: []
   },
-  {
-    id: 4,
-    tipo: 'Reunião de Planejamento',
-    status: 'cancelado',
-    dataInicio: '2024-03-10',
-    dataFim: '2024-03-10',
-    pontos: [],
-    poligonos: []
-  }
+
 ]);
+
+
+console.log("ocorrencias",   props.ocorrencias)
 
 // Estado para controlar o modal de edição
 const showEditModal = ref(false);
@@ -212,21 +212,13 @@ const abrirEdicao = (evento: Evento) => {
 <template>
   <div class="event-cards">
     <div class="flex justify-between items-center mb-4">
-      <h2 class="text-xl font-bold text-green-800">Situação registrada</h2>
-      <Button 
-        variant="outline" 
-        size="sm" 
-        class="text-green-700 border-green-700 hover:bg-green-50"
-        @click="router.push('/criar-ocorrencia')"
-      >
-        <Plus class="h-4 w-4 mr-1" />
-        Adicionar
-      </Button>
+      <h2 class="text-xl font-bold text-green-800">Ocorrências Registradas</h2>
+
     </div>
     
     <div class="grid grid-cols-1 gap-4">
       <div
-        v-for="evento in eventos"
+        v-for="evento in props.ocorrencias"
         :key="evento.id"
         class="bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow"
       >
@@ -245,11 +237,11 @@ const abrirEdicao = (evento: Evento) => {
           <div class="flex items-center gap-4 text-sm text-gray-600">
             <div class="flex items-center gap-1">
               <Calendar class="h-4 w-4" />
-              <span>Início: {{ formatDate(evento.dataInicio) }}</span>
+              <span>Início: {{ formatDate(evento.created_at) }}</span>
             </div>
             <div v-if="evento.status === 'concluido' && evento.dataFim" class="flex items-center gap-1">
               <Calendar class="h-4 w-4" />
-              <span>Conclusão: {{ formatDate(evento.dataFim) }}</span>
+              <span>Conclusão: {{ formatDate(evento.updated_at) }}</span>
             </div>
           </div>
           
@@ -424,6 +416,24 @@ const abrirEdicao = (evento: Evento) => {
 <style scoped>
 .event-cards {
   margin-top: 2rem;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.grid {
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 1.5rem;
+}
+
+.bg-white {
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.bg-white:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 </style>
 

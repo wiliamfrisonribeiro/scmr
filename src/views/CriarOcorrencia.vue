@@ -1,62 +1,115 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppBar from '@/components/AppBar.vue';
 import InteractiveMap from '@/components/InteractiveMap.vue';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, MapPin, Shapes, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, MapPin, Shapes, Trash2, Upload } from 'lucide-vue-next';
+import { useUser } from '@/composables/useUser';
 
 const router = useRouter();
+const { userAccountId } = useUser();
+const token = ref('');
 const titulo = ref('');
 const descricao = ref('');
+const tipo = ref('');
+const imagem = ref<File | null>(null);
+const imagemPreview = ref<string | null>(null);
 const pontos = ref<{ x: number; y: number; descricao: string }[]>([]);
 const poligonos = ref<{ rings: number[][][]; descricao: string }[]>([]);
 const mapRef = ref<InstanceType<typeof InteractiveMap> | null>(null);
+const geometry = ref<any>(null);
 
-const handlePointAdded = (point: { x: number; y: number }) => {
-  pontos.value.push({
-    ...point,
-    descricao: `Ponto ${pontos.value.length + 1}`
-  });
+onMounted(() => {
+  const storedToken = localStorage.getItem('token');
+  if (storedToken) {
+    token.value = storedToken;
+  } else {
+    router.push('/login');
+  }
+});
+
+const handleImageUpload = (event: Event) => {
+  const target = event.target as HTMLInputElement;      
+  if (target.files && target.files[0]) {
+    imagem.value = target.files[0];
+    // Criar preview da imagem
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      imagemPreview.value = e.target?.result as string;
+    };
+    reader.readAsDataURL(target.files[0]);
+  }
 };
 
-const handlePolygonAdded = (polygon: { rings: number[][][] }) => {
-  poligonos.value.push({
-    ...polygon,
-    descricao: `Polígono ${poligonos.value.length + 1}`
-  });
+const removeImage = () => {
+  imagem.value = null;
+  imagemPreview.value = null;
 };
 
 const handleVoltar = () => {
   router.push('/dashboard');
 };
 
-const handleSalvar = () => {
-  // Aqui você implementaria a lógica para salvar a ocorrência
-  console.log('Salvando ocorrência:', {
-    titulo: titulo.value,
-    descricao: descricao.value,
-    pontos: pontos.value,
-    poligonos: poligonos.value
-  });
-  
-  // Limpar os pontos do mapa
-  if (mapRef.value) {
-    (mapRef.value as any).clearPoints();
+const handleSalvar = async () => {
+  try {
+    if (!token.value) {
+      router.push('/login');
+      return;
+    }
+
+    const myHeaders = new Headers();
+    myHeaders.append("Content-Type", "application/json");
+    myHeaders.append("Accept", "application/json");
+    myHeaders.append("Authorization", `Bearer ${token.value}`);
+    console.log(userAccountId)
+    debugger
+    console.log(geometry.value);
+    const raw = JSON.stringify({
+      description: descricao.value,
+      type: tipo.value,
+      title: titulo.value,
+      location: geometry.value,
+      ocurrency_status: 'pendente',
+      account_id: userAccountId.value,
+      opinion_account_id: userAccountId.value
+    });
+
+    const requestOptions: RequestInit = {
+      method: "POST",
+      headers: myHeaders,
+      body: raw
+    };
+
+    const response = await fetch("https://smrc.onrender.com/ocurrencies", requestOptions);
+    const result = await response.json();
+
+    if (response.ok) {
+      // Limpar os pontos do mapa
+      if (mapRef.value) {
+        (mapRef.value as any).clearPoints();
+      }
+      
+      // Redirecionar para o dashboard
+      router.push('/dashboard');
+    } else {
+      console.error('Erro ao salvar ocorrência:', result);
+      // Aqui você pode adicionar uma notificação de erro
+    }
+  } catch (error) {
+    console.error('Erro ao salvar ocorrência:', error);
+    // Aqui você pode adicionar uma notificação de erro
   }
-  
-  // Redirecionar para o dashboard
-  router.push('/dashboard');
 };
 
 const updatePontoDescricao = (index: number, event: Event) => {
   const target = event.target as HTMLInputElement;
-  pontos.value[index].descricao = target.value;
+  pontos.value[index].descricao = target.value as string; 
 };
 
 const updatePoligonoDescricao = (index: number, event: Event) => {
   const target = event.target as HTMLInputElement;
-  poligonos.value[index].descricao = target.value;
+  poligonos.value[index].descricao = target.value as string;
 };
 
 const removePonto = (index: number) => {
@@ -66,6 +119,31 @@ const removePonto = (index: number) => {
 const removePoligono = (index: number) => {
   poligonos.value.splice(index, 1);
 };
+
+const handlePointAdded = (data: { type: string; geometry: string }) => {
+  const geometry = JSON.parse(data.geometry);
+  pontos.value.push({
+    x: geometry.x,
+    y: geometry.y,
+    descricao: `Ponto ${pontos.value.length + 1}`
+  });
+
+  geometry.value = data.geometry;
+};
+
+const handlePolygonAdded = (data: { type: string; geometry: string }) => {
+  const g = JSON.parse(data.geometry);
+  console.log("geometry", g)
+  poligonos.value.push({
+    rings: g.rings,
+    descricao: `Polígono ${poligonos.value.length + 1}`
+  });
+
+  geometry.value = data.geometry;
+  console.log("geometry", geometry)
+  
+};
+
 </script>
 
 <template>
@@ -81,9 +159,10 @@ const removePoligono = (index: number) => {
         <h1 class="text-2xl font-bold text-green-800">Criar Nova Ocorrência</h1>
       </div>
       
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
         <!-- Formulário -->
-        <div class="bg-white rounded-lg shadow-md p-6">
+        <div class="bg-white rounded-lg shadow-md p-2">
           <h2 class="text-xl font-bold mb-4 text-green-800">Informações da Ocorrência</h2>
           
           <div class="mb-4">
@@ -95,6 +174,59 @@ const removePoligono = (index: number) => {
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
               placeholder="Digite o título da ocorrência"
             />
+          </div>
+
+          <div class="mb-4">
+            <label for="tipo" class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+            <select
+              id="tipo"
+              v-model="tipo"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
+            >
+              <option value="">Selecione o tipo</option>
+              <option value="alagamento">Alagamento</option>
+              <option value="deslizamento">Deslizamento</option>
+              <option value="incendio">Incêndio</option>
+              <option value="acidente">Acidente</option>
+              <option value="pragas">Pragas</option>
+              <option value="outro">Outro</option>
+            </select>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Imagem</label>
+            <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+              <div class="space-y-1 text-center">
+                <div v-if="!imagemPreview" class="flex text-sm text-gray-600">
+                  <label
+                    for="imagem"
+                    class="relative cursor-pointer bg-white rounded-md font-medium text-green-600 hover:text-green-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-green-500"
+                  >
+                    <span>Upload de imagem</span>
+                    <input
+                      id="imagem"
+                      type="file"
+                      accept="image/*"
+                      class="sr-only"
+                      @change="handleImageUpload"
+                    />
+                  </label>
+                  <p class="pl-1">ou arraste e solte</p>
+                </div>
+                <div v-else class="relative">
+                  <img :src="imagemPreview" alt="Preview" class="max-h-48 rounded-lg" />
+                  <button
+                    @click="removeImage"
+                    class="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                  >
+                    <Trash2 class="h-4 w-4" />
+                  </button>
+                </div>
+                <p class="text-xs text-gray-500">
+                  PNG, JPG, GIF até 10MB
+                </p>
+              </div>
+            </div>
           </div>
           
           <div class="mb-6">
@@ -191,15 +323,14 @@ const removePoligono = (index: number) => {
             Salvar Ocorrência
           </Button>
         </div>
-        
-        <!-- Mapa -->
-        <div>
+            <!-- Mapa -->
+    <div class="border-2 border-green-700 rounded-lg h-[calc(100vh-100px)]" >
           <InteractiveMap 
-            ref="mapRef"
             @point-added="handlePointAdded"
             @polygon-added="handlePolygonAdded"
           />
         </div>
+    
       </div>
     </main>
   </div>

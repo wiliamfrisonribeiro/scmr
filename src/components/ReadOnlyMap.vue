@@ -1,177 +1,99 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
-import MapView from '@arcgis/core/views/MapView';
+import { ref, onMounted } from 'vue';
 import Map from '@arcgis/core/Map';
-import TileLayer from '@arcgis/core/layers/TileLayer';
+import MapView from '@arcgis/core/views/MapView';
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer';
 import Graphic from '@arcgis/core/Graphic';
-import Point from '@arcgis/core/geometry/Point';
-import Polygon from '@arcgis/core/geometry/Polygon';
-import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol';
-import SimpleFillSymbol from '@arcgis/core/symbols/SimpleFillSymbol';
-import SimpleLineSymbol from '@arcgis/core/symbols/SimpleLineSymbol';
+import { Polygon } from '@arcgis/core/geometry';
+import { SimpleFillSymbol } from '@arcgis/core/symbols';
 
-// Interface para as ocorrências
-interface Ocorrencia {
-  id: number;
-  tipo: 'ponto' | 'poligono';
-  localizacao?: {
-    latitude: number;
-    longitude: number;
-  };
-  coordenadas?: number[][];
-  descricao: string;
-  data: string;
-}
-
-// Referência para o elemento do mapa
+const props = defineProps<{
+  ocorrencias: any[]; // Você pode tipar melhor depois
+}>();
+const formatDate = (date: string) => {
+  if (!date) return '-';
+  return new Date(date).toLocaleString('pt-BR');
+};
 const mapDiv = ref<HTMLDivElement | null>(null);
-let mapView: MapView | null = null;
-let graphicsLayer: GraphicsLayer | null = null;
 
-// Dados de exemplo para as ocorrências
-const ocorrencias = ref<Ocorrencia[]>([
-  {
-    id: 1,
-    tipo: 'ponto',
-    localizacao: {
-      latitude: -23.5505,
-      longitude: -46.6333
-    },
-    descricao: 'Desmatamento em área protegida',
-    data: '15/06/2023'
-  },
-  {
-    id: 2,
-    tipo: 'poligono',
-    coordenadas: [
-      [-23.5505, -46.6333],
-      [-23.5605, -46.6433],
-      [-23.5705, -46.6533],
-      [-23.5505, -46.6333]
-    ],
-    descricao: 'Poluição de rio',
-    data: '12/06/2023'
-  },
-  {
-    id: 3,
-    tipo: 'ponto',
-    localizacao: {
-      latitude: -23.5605,
-      longitude: -46.6433
-    },
-    descricao: 'Queimada em área de preservação',
-    data: '10/06/2023'
-  }
-]);
-
-// Inicializar o mapa
-const initMap = async () => {
+onMounted(() => {
   if (!mapDiv.value) return;
 
-  // Criar o mapa base
+  const graphicsLayer = new GraphicsLayer();
+
   const map = new Map({
-    basemap: 'topo-vector'
+    basemap: 'streets-vector',
+    layers: [graphicsLayer],
   });
 
-  // Criar a visualização do mapa
-  mapView = new MapView({
+  const view = new MapView({
     container: mapDiv.value,
-    map: map,
-    center: [-15.7801, -47.9292], // Centro do Brasil (Brasília)
-    zoom: 4 // Zoom mais amplo para ver o Brasil
+    map,
+    center: [-51.23, -30.02],
+    zoom: 7,
   });
 
-  // Adicionar camada de gráficos
-  graphicsLayer = new GraphicsLayer();
-  map.add(graphicsLayer);
 
-  // Adicionar ocorrências ao mapa
-  adicionarOcorrencias();
-};
 
-// Adicionar ocorrências ao mapa
-const adicionarOcorrencias = () => {
-  if (!graphicsLayer) return;
+  view.when(() => {
+    
+    props.ocorrencias.forEach((ocorrencia) => {
+      let geometryData;
 
-  // Limpar gráficos existentes
-  graphicsLayer.removeAll();
+      try {
+        geometryData = typeof ocorrencia.location === 'string'
+          ? JSON.parse(ocorrencia.location)
+          : ocorrencia.location;
+      } catch (e) {
+        console.warn('Erro ao converter location', ocorrencia.location, e);
+        return;
+      }
 
-  // Adicionar cada ocorrência
-  ocorrencias.value.forEach(ocorrencia => {
-    let graphic: Graphic | undefined;
+      if (geometryData?.rings) {
+        const polygon = new Polygon(geometryData);
 
-    if (ocorrencia.tipo === 'ponto' && ocorrencia.localizacao) {
-      // Criar ponto
-      const point = new Point({
-        latitude: ocorrencia.localizacao.latitude,
-        longitude: ocorrencia.localizacao.longitude
-      });
+        const symbol = new SimpleFillSymbol({
+          color: [227, 139, 79, 0.6],
+          outline: {
+            color: [255, 255, 255],
+            width: 1,
+          },
+        });
 
-      // Criar símbolo para o ponto
-      const symbol = new SimpleMarkerSymbol({
-        color: [255, 0, 0, 0.8],
-        size: 12,
-        outline: {
-          color: [255, 255, 255, 0.8],
-          width: 2
-        }
-      });
+        const polygonGraphic = new Graphic({
+          geometry: polygon,
+          symbol,
+          attributes: {
+            tipo: ocorrencia.type || 'Ocorrência sem título',
+            descricao: ocorrencia.descricao || 'Sem descrição disponível',
+            criadopor: ocorrencia.account_name || 'Sem nome de conta disponível',
+            parecer: ocorrencia.opinion || 'Sem parecer disponível',
+            respondidopor: ocorrencia.opinion || 'Não respondido',
+            status: ocorrencia.ocurrency_status || 'Pendente',
+            created_at: formatDate(ocorrencia.created_date) || 'Sem data de criação disponível',
+            updated_at: formatDate(ocorrencia.updated_date) || 'Sem data de atualização disponível',
+            
+          },
+          popupTemplate: {
+  title: '{tipo}',
+  content: `
+    <p><strong>Descrição:</strong> {descricao}</p>
+    <p><strong>Criado por:</strong> {criadopor}</p>
+    <p><strong>Parecer:</strong> {parecer}</p>
+    <p><strong>Respondido por:</strong> {respondidopor}</p>
+    <p><strong>Status:</strong> {status}</p>
+    <p><strong>Criado em:</strong> {created_at}</p>
+    <p><strong>Atualizado em:</strong> {updated_at}</p>
+  `
+}
+        });
 
-      graphic = new Graphic({
-        geometry: point,
-        symbol: symbol,
-        attributes: {
-          id: ocorrencia.id,
-          descricao: ocorrencia.descricao,
-          data: ocorrencia.data
-        }
-      });
-    } else if (ocorrencia.tipo === 'poligono' && ocorrencia.coordenadas) {
-      // Criar polígono
-      const polygon = new Polygon({
-        rings: [ocorrencia.coordenadas]
-      });
-
-      // Criar símbolo para o polígono
-      const symbol = new SimpleFillSymbol({
-        color: [255, 0, 0, 0.3],
-        outline: new SimpleLineSymbol({
-          color: [255, 0, 0, 0.8],
-          width: 2
-        })
-      });
-
-      graphic = new Graphic({
-        geometry: polygon,
-        symbol: symbol,
-        attributes: {
-          id: ocorrencia.id,
-          descricao: ocorrencia.descricao,
-          data: ocorrencia.data
-        }
-      });
-    }
-
-    if (graphic && graphicsLayer) {
-      graphicsLayer.add(graphic);
-    }
+        graphicsLayer.add(polygonGraphic);
+      }
+    });
   });
-};
-
-// Inicializar o mapa quando o componente for montado
-onMounted(() => {
-  initMap();
-});
-
-// Limpar recursos quando o componente for desmontado
-onUnmounted(() => {
-  if (mapView) {
-    mapView.destroy();
-  }
 });
 </script>
-
 <template>
   <div ref="mapDiv" class="map-container"></div>
 </template>
@@ -179,12 +101,7 @@ onUnmounted(() => {
 <style scoped>
 .map-container {
   width: 100%;
-  height: 100%;
+  height: 100vh;
+  position: relative;
 }
 </style>
-
-<script lang="ts">
-export default {
-  name: 'ReadOnlyMap'
-};
-</script> 

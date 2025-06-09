@@ -108,8 +108,8 @@ const sobreNos = ref({
     <header class="header">
       <div class="header-content">
         <div class="logo-container">
-          <img src="/logo.svg" alt="Logo" class="logo" />
-          <h1 class="site-title">Sistema de Monitoramento de Ocorrências</h1>
+      
+          <h1 class="site-title">SCMR</h1>
         </div>
         <nav class="main-nav">
           <ul>

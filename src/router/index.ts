@@ -1,10 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Home from '../views/Home.vue'
 import Login from '@/views/Login.vue'
+import Register from '@/views/Register.vue'
 import MapView from '@/views/MapView.vue'
 import Dashboard from '../views/Dashboard.vue'
 import CriarOcorrencia from '../views/CriarOcorrencia.vue'
 import EditarOcorrencia from '../views/EditarOcorrencia.vue'
+import { isAuthenticated as checkAuth } from '@/services/auth/auth'
 
 
 const router = createRouter({
@@ -21,6 +23,11 @@ const router = createRouter({
       component: Login
     },
     {
+      path: '/register',
+      name: 'register',
+      component: Register
+    },
+    {
       path: '/map',
       name: 'map',
       component: MapView
@@ -28,17 +35,20 @@ const router = createRouter({
     {
       path: '/dashboard',
       name: 'dashboard',
-      component: Dashboard
+      component: Dashboard,
+      meta: { requiresAuth: true }
     },
     {
       path: '/criar-ocorrencia',
       name: 'criar-ocorrencia',
-      component: CriarOcorrencia
+      component: CriarOcorrencia,
+      meta: { requiresAuth: true }
     },
     {
       path: '/editar-ocorrencia/:id',
       name: 'editar-ocorrencia',
-      component: EditarOcorrencia
+      component: EditarOcorrencia,
+      meta: { requiresAuth: true }
     }
   ]
 })

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ArcGISMap from '@/components/ArcGISMap.vue';
+import InteractiveMap from '@/components/InteractiveMap.vue';
 </script>
 
 <template>
@@ -10,7 +10,7 @@ import ArcGISMap from '@/components/ArcGISMap.vue';
     </div>
     
     <div class="map-container h-[calc(100vh-64px)]">
-      <ArcGISMap />
+      <InteractiveMap />
     </div>
   </div>
 </template>
