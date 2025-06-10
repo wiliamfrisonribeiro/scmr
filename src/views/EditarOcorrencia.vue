@@ -1,260 +1,614 @@
-<script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+<script setup>
+import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, MapPin, Shapes, Trash2 } from 'lucide-vue-next';
+import { fetchOcorrenciaById } from '@/services/ocorrencias/ocorrencias.ts';
+import AppBar from '@/components/AppBar.vue';
 import { Button } from '@/components/ui/button';
+import { ArrowLeft, MapPin, Shapes, Trash2 } from 'lucide-vue-next';
+import ReadOnlyMap from '@/components/ReadOnlyMap.vue';
 import InteractiveMap from '@/components/InteractiveMap.vue';
+import { useUser } from '@/composables/useUser';
 
-interface Ponto {
-  id: number;
-  latitude: number;
-  longitude: number;
-  descricao: string;
-}
-
-interface Poligono {
-  id: number;
-  vertices: { latitude: number; longitude: number }[];
-  descricao: string;
-}
-
-interface Evento {
-  id: number;
-  tipo: string;
-  status: 'pendente' | 'em_andamento' | 'concluido' | 'cancelado';
-  dataInicio: string;
-  dataFim: string;
-  pontos: Ponto[];
-  poligonos: Poligono[];
-}
-
-const route = useRoute();
 const router = useRouter();
-const evento = ref<Evento | null>(null);
+const route = useRoute();
+const ocorrencia = ref(null);
 const loading = ref(true);
+const error = ref(null);
+const { userAccountId } = useUser();
 
-// Observador para o status do evento
-const observarStatus = () => {
-  if (evento.value) {
-    // Se o status não for "concluido", limpa a data de fim
-    if (evento.value.status !== 'concluido') {
-      evento.value.dataFim = '';
-    } else if (!evento.value.dataFim) {
-      // Se o status for "concluido" e não tiver data de fim, define para hoje
-      evento.value.dataFim = new Date().toISOString().split('T')[0];
+const tipo = ref('');
+const descricao = ref('');
+const imagemPreview = ref(null);
+const pontos = ref([]);
+const poligonos = ref([]);
+const documentos = ref([]);
+const status = ref('');
+const opinion = ref('');
+const account_id = ref('');
+const opinion_account_id = ref('');
+
+// Add computed properties for safe access
+const hasDocumentos = computed(() => documentos.value && documentos.value.length > 0);
+const hasPontos = computed(() => pontos.value && pontos.value.length > 0);
+const hasPoligonos = computed(() => poligonos.value && poligonos.value.length > 0);
+
+const handleVoltar = () => {
+  router.back();
+};
+
+const handleImageUpload = (event) => {
+  const file = event.target.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      imagemPreview.value = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+};
+
+const removeImage = () => {
+  imagemPreview.value = null;
+};
+
+const updatePontoDescricao = (index, event) => {
+  pontos.value[index].descricao = event.target.value;
+};
+
+const updatePoligonoDescricao = (index, event) => {
+  poligonos.value[index].descricao = event.target.value;
+};
+
+const removePonto = (index) => {
+  pontos.value.splice(index, 1);
+};
+
+const removePoligono = (index) => {
+  poligonos.value.splice(index, 1);
+};
+
+const handleSalvar = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      alert('Usuário não autenticado!');
+      return;
     }
+
+    // Prepare the occurrence data
+    const occurrenceData = {
+      type: tipo.value,
+      description: descricao.value,
+      ocurrency_status: status.value,
+      opinion: opinion.value,
+      opinion_account_id: userAccountId.value,
+      account_id: account_id.value,
+      location: JSON.stringify({
+        spatialReference: {
+          latestWkid: 3857,
+          wkid: 102100
+        },
+        rings: poligonos.value[0]?.rings || []
+      })
+      
+    };
+
+    // Update occurrence
+    const updateHeaders = new Headers();
+    updateHeaders.append("Content-Type", "application/json");
+    updateHeaders.append("Authorization", `Bearer ${token}`);
+
+    const updateResponse = await fetch(`https://smrc.onrender.com/ocurrencies/${route.params.id}`, {
+      method: "PUT",
+      headers: updateHeaders,
+      body: JSON.stringify(occurrenceData)
+    });
+
+    if (!updateResponse.ok) {
+      throw new Error('Erro ao atualizar ocorrência');
+    }
+
+    alert('Ocorrência atualizada com sucesso!');
+    router.back();
+  } catch (error) {
+    console.error('Erro ao salvar:', error);
+    alert('Erro ao salvar ocorrência. Por favor, tente novamente.');
   }
 };
 
-// Funções para manipular pontos e polígonos
-const handlePontoAdicionado = (ponto: Ponto) => {
-  if (evento.value) {
-    evento.value.pontos.push(ponto);
+onMounted(async () => {
+  loading.value = true;
+  try {
+    const id = route.params.id;
+    const token = localStorage.getItem('token');
+    if (!token) {
+      error.value = 'Usuário não autenticado';
+      return;
+    }
+
+    // Fetch occurrence data
+    const data = await fetchOcorrenciaById(id);
+    if (data) {
+      ocorrencia.value = data;
+      debugger
+      // Initialize form fields with ocorrência data
+      tipo.value = data.type || '';
+      descricao.value = data.description || '';
+      account_id.value = data.account_id || '';
+      status.value = data.ocurrency_status || '';
+      opinion.value = data.opinion || '';
+      opinion_account_id.value = data.opinion_account_id || '';
+      if (data.image) {
+        imagemPreview.value = data.image;
+      }
+      if (data.points && Array.isArray(data.points)) {
+        pontos.value = data.points.map(p => ({
+          x: p.x,
+          y: p.y,
+          descricao: p.description || ''
+        }));
+      }
+      if (data.location) {
+        try {
+          const locationData = JSON.parse(data.location);
+          if (locationData.rings && Array.isArray(locationData.rings)) {
+            poligonos.value = [{
+              rings: locationData.rings,
+              spatialReference: locationData.spatialReference,
+              descricao: data.description || ''
+            }];
+          }
+        } catch (e) {
+          console.error('Erro ao fazer parse do location:', e);
+          error.value = 'Erro ao processar dados de localização.';
+        }
+      }
+
+      // Fetch documents
+      const docHeaders = new Headers();
+      docHeaders.append("Accept", "application/json");
+      docHeaders.append("Authorization", `Bearer ${token}`);
+
+      const docResponse = await fetch(`https://smrc.onrender.com/ocurrencies/${id}/files`, {
+        method: "GET",
+        headers: docHeaders
+      });
+
+      if (docResponse.ok) {
+        const docData = await docResponse.json();
+        documentos.value = Array.isArray(docData) ? docData : [];
+      } else {
+        console.error('Erro ao buscar documentos');
+        documentos.value = [];
+      }
+    } else {
+      error.value = 'Ocorrência não encontrada.';
+    }
+  } catch (e) {
+    console.error('Erro ao buscar ocorrência.', e);
+    error.value = 'Erro ao carregar ocorrência. Por favor, tente novamente.';
+  } finally {
+    loading.value = false;
   }
-};
-
-const handlePoligonoAdicionado = (poligono: Poligono) => {
-  if (evento.value) {
-    evento.value.poligonos.push(poligono);
-  }
-};
-
-const handlePontoRemovido = (id: number) => {
-  if (evento.value) {
-    evento.value.pontos = evento.value.pontos.filter(p => p.id !== id);
-  }
-};
-
-const handlePoligonoRemovido = (id: number) => {
-  if (evento.value) {
-    evento.value.poligonos = evento.value.poligonos.filter(p => p.id !== id);
-  }
-};
-
-const salvarAlteracoes = () => {
-  // TODO: Implementar a lógica de salvamento
-  console.log('Salvando alterações:', evento.value);
-  router.push('/dashboard');
-};
-
-const voltar = () => {
-  router.push('/dashboard');
-};
-
-onMounted(() => {
-  // TODO: Carregar os dados do evento do backend
-  // Por enquanto, usando dados mockados
-  evento.value = {
-    id: Number(route.params.id),
-    tipo: 'Manutenção Preventiva',
-    status: 'pendente',
-    dataInicio: '2024-03-25',
-    dataFim: '',
-    pontos: [],
-    poligonos: []
-  };
-  
-  // Observa mudanças no status
-  watch(() => evento.value?.status, () => {
-    observarStatus();
-  });
-  
-  loading.value = false;
 });
+
+
+const handlePointAdded = (data) => {
+  const geometry = JSON.parse(data.geometry);
+  pontos.value.push({
+    x: geometry.x,
+    y: geometry.y,
+    descricao: `Ponto ${pontos.value.length + 1}`
+  });
+
+  geometry.value = data.geometry;
+};
+
+const handlePolygonAdded = (data) => {
+  const g = JSON.parse(data.geometry);
+  console.log("geometry", g)
+  poligonos.value.push({
+    rings: g.rings,
+    descricao: `Polígono ${poligonos.value.length + 1}`
+  });
+
+  geometry.value = data.geometry;
+  console.log("geometry", geometry)
+  
+};
+
+const removeDocument = async (docId) => {
+  if (!confirm('Tem certeza que deseja remover este documento?')) return;
+
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      alert('Usuário não autenticado!');
+      return;
+    }
+
+    const headers = new Headers();
+    headers.append("Authorization", `Bearer ${token}`);
+
+    const response = await fetch(`https://smrc.onrender.com/ocurrencies/${route.params.id}/files/${docId}`, {
+      method: "DELETE",
+      headers: headers
+    });
+
+    if (response.ok) {
+      // Remove document from local state
+      documentos.value = documentos.value.filter(doc => doc.id !== docId);
+      alert('Documento removido com sucesso!');
+    } else {
+      throw new Error('Erro ao remover documento');
+    }
+  } catch (error) {
+    console.error('Erro ao remover documento:', error);
+    alert('Erro ao remover documento. Por favor, tente novamente.');
+  }
+};
+
+const formatDate = (dateString) => {
+  if (!dateString) return '-';
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (error) {
+    console.error('Erro ao formatar data:', error);
+    return '-';
+  }
+};
+
+const getFileType = (filename) => {
+  const extension = filename.split('.').pop()?.toLowerCase();
+  const typeMap = {
+    'jpg': 'Imagem',
+    'jpeg': 'Imagem',
+    'png': 'Imagem',
+    'gif': 'Imagem',
+    'pdf': 'PDF',
+    'doc': 'Documento',
+    'docx': 'Documento',
+    'xls': 'Planilha',
+    'xlsx': 'Planilha',
+    'txt': 'Texto'
+  };
+  return typeMap[extension] || 'Arquivo';
+};
+
+const viewDocument = (doc) => {
+  window.open(doc.signed_url, '_blank');
+};
+
+const downloadDocument = async (doc) => {
+  try {
+    const response = await fetch(doc.signed_url);
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = doc.name;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  } catch (error) {
+    console.error('Erro ao baixar documento:', error);
+    alert('Erro ao baixar documento. Por favor, tente novamente.');
+  }
+};
+
 </script>
 
+
 <template>
-  <div class="min-h-screen bg-gray-50">
-    <!-- Header -->
-    <header class="bg-white shadow">
-      <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center">
-            <Button 
-              variant="ghost" 
-              class="mr-4"
-              @click="voltar"
+  <div class="criar-ocorrencia-container">
+    <AppBar />
+
+    <main class="container mx-auto px-4 py-6">
+      <div class="flex items-center mb-6">
+        <Button @click="handleVoltar" variant="ghost" class="mr-2">
+          <ArrowLeft class="h-4 w-4 mr-1" />
+          Voltar
+        </Button>
+        <h1 class="text-2xl font-bold text-green-800">Editar Ocorrência</h1>
+      </div>
+
+      <div v-if="loading" class="flex justify-center items-center py-8">
+        <svg class="animate-spin h-6 w-6 text-green-700 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span class="text-green-700 font-medium">Carregando ocorrência...</span>
+      </div>
+
+      <div v-else-if="error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+        <strong class="font-bold">Erro!</strong>
+        <span class="block sm:inline"> {{ error }}</span>
+      </div>
+
+      <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div class="bg-white rounded-lg shadow-md p-6">
+          <h2 class="text-xl font-bold mb-4 text-green-800">Informações da Ocorrência</h2>
+
+          <div class="mb-4">
+            <label for="tipo" class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+            <select
+              id="tipo"
+              v-model="tipo"
+              disabled
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
             >
-              <ArrowLeft class="h-5 w-5" />
-            </Button>
-            <h1 class="text-2xl font-bold text-gray-900">
-              Editar Ocorrência
-            </h1>
+              <option value="">Selecione o tipo</option>
+              <option value="alagamento">Alagamento</option>
+              <option value="deslizamento">Deslizamento</option>
+              <option value="incendio">Incêndio</option>
+              <option value="acidente">Acidente</option>
+              <option value="pragas">Pragas</option>
+              <option value="outro">Outro</option>
+            </select>
           </div>
-          <Button 
-            class="bg-green-700 hover:bg-green-800 text-white"
-            @click="salvarAlteracoes"
-          >
-            Salvar Alterações
-          </Button>
-        </div>
-      </div>
-    </header>
 
-    <!-- Conteúdo Principal -->
-    <main class="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
-      <div v-if="loading" class="flex justify-center items-center h-64">
-        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-green-700"></div>
-      </div>
 
-      <div v-else-if="evento" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Formulário -->
-        <div class="lg:col-span-1">
-          <div class="bg-white rounded-lg shadow p-6">
-            <h2 class="text-lg font-medium text-gray-900 mb-4">Informações da Ocorrência</h2>
-            
+          <div class="mb-4">
+            <label for="status" class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <select
+              id="status"
+              v-model="status"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
+            >
+              <option value="">Selecione o status</option>
+              <option value="pendente">Pendente</option>
+              <option value="análise">Em Análise</option>
+              <option value="concluído">Concluído</option>
+              <option value="em andamento">Em Andamento</option>
+            </select>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Imagem</label>
+            <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+              <div class="space-y-1 text-center">
+                <div v-if="!imagemPreview" class="flex text-sm text-gray-600">
+                  <label
+                    for="imagem"
+                    class="relative cursor-pointer bg-white rounded-md font-medium text-green-600 hover:text-green-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-green-500"
+                  >
+                    <span>Upload de imagem</span>
+                    <input
+                      id="imagem"
+                      type="file"
+                      accept="image/*"
+                      class="sr-only"
+                      disabled
+                      @change="handleImageUpload"
+                    />
+                  </label>
+                  <p class="pl-1">ou arraste e solte</p>
+                </div>
+                <div v-else class="relative">
+                  <img :src="imagemPreview" alt="Preview" class="max-h-48 rounded-lg" />
+                  <button
+                    @click="removeImage"
+                    class="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                  >
+                    <Trash2 class="h-4 w-4" />
+                  </button>
+                </div>
+                <p class="text-xs text-gray-500">
+                  PNG, JPG, GIF até 10MB
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Documentos existentes -->
+          <div v-if="hasDocumentos" class="mb-4">
+            <h3 class="text-sm font-medium text-gray-700 mb-2">Documentos existentes:</h3>
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Nome
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Tipo
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Data
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Ações
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <tr v-for="doc in documentos" :key="doc.id" class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {{ doc.name }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {{ getFileType(doc.name) }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {{ formatDate(doc.created_at) }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div class="flex justify-end space-x-2">
+                        <button 
+                          @click="viewDocument(doc)"
+                          class="text-green-600 hover:text-green-900"
+                          title="Visualizar"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                            <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+                          </svg>
+                        </button>
+                        <button 
+                          @click="downloadDocument(doc)"
+                          class="text-blue-600 hover:text-blue-900"
+                          title="Baixar"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                          </svg>
+                        </button>
+                        <button 
+                          @click="removeDocument(doc.id)"
+                          class="text-red-600 hover:text-red-900"
+                          title="Remover"
+                        >
+                          <Trash2 class="h-5 w-5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="mb-6">
+            <label for="descricao" class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+            <textarea
+              id="descricao"
+              v-model="descricao"
+              rows="4"
+              disabled
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
+              placeholder="Digite a descrição da ocorrência"
+            ></textarea>
+          </div>
+
+          <div class="mb-6">
+            <label for="parecer" class="block text-sm font-medium text-gray-700 mb-1">Escreva o parecer da ocorrência</label>
+            <textarea
+              id="parecer"
+              v-model="opinion"
+              rows="4"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
+              placeholder="Digite a descrição da ocorrência"
+            ></textarea>
+          </div>
+
+          <div class="mb-4">
+            <h3 class="text-sm font-medium text-gray-700 mb-2">Elementos Adicionados:</h3>
             <div class="space-y-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                <input 
-                  v-model="evento.tipo" 
-                  type="text" 
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
-                />
+              <!-- Pontos -->
+              <div v-if="hasPontos" class="mb-4">
+                <h4 class="text-sm font-medium text-gray-600 flex items-center">
+                  <MapPin class="h-4 w-4 mr-1" />
+                  Pontos ({{ pontos.length }})
+                </h4>
+                <div class="max-h-60 overflow-y-auto border border-gray-200 rounded-md p-2">
+                  <ul class="text-sm space-y-2">
+                    <li v-for="(ponto, index) in pontos" :key="'ponto-'+index" class="p-2 border border-gray-100 rounded-md hover:bg-green-50">
+                      <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                          <input 
+                            type="text" 
+                            v-model="ponto.descricao" 
+                            class="w-full px-2 py-1 border border-gray-300 rounded-md text-sm mb-1"
+                            @input="(e) => updatePontoDescricao(index, e)"
+                          />
+                          <p class="text-xs text-gray-500">
+                            Coordenadas: {{ ponto.x?.toFixed(6) }}, {{ ponto.y?.toFixed(6) }}
+                          </p>
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          class="text-red-500 hover:text-red-700 hover:bg-red-50"
+                          @click="removePonto(index)"
+                        >
+                          <Trash2 class="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </li>
+                  </ul>
+                </div>
               </div>
               
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                <select 
-                  v-model="evento.status" 
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
-                >
-                  <option value="pendente">Pendente</option>
-                  <option value="em_andamento">Em Andamento</option>
-                  <option value="concluido">Concluído</option>
-                  <option value="cancelado">Cancelado</option>
-                </select>
+              <!-- Polígonos -->
+              <div v-if="hasPoligonos" class="mb-4">
+                <h4 class="text-sm font-medium text-gray-600 flex items-center">
+                  <Shapes class="h-4 w-4 mr-1" />
+                  Polígonos ({{ poligonos.length }})
+                </h4>
+                <div class="max-h-60 overflow-y-auto border border-gray-200 rounded-md p-2">
+                  <ul class="text-sm space-y-2">
+                    <li v-for="(poligono, index) in poligonos" :key="'poligono-'+index" class="p-2 border border-gray-100 rounded-md hover:bg-green-50">
+                      <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                          <input 
+                            type="text" 
+                            v-model="poligono.descricao" 
+                            class="w-full px-2 py-1 border border-gray-300 rounded-md text-sm mb-1"
+                            @input="(e) => updatePoligonoDescricao(index, e)"
+                          />
+                          <p class="text-xs text-gray-500">
+                            {{ poligono.rings?.[0]?.length || 0 }} vértices
+                          </p>
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          class="text-red-500 hover:text-red-700 hover:bg-red-50"
+                          @click="removePoligono(index)"
+                        >
+                          <Trash2 class="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </li>
+                  </ul>
+                </div>
               </div>
               
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Data de Início</label>
-                <input 
-                  v-model="evento.dataInicio" 
-                  type="date" 
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
-                />
-              </div>
-              
-              <div v-if="evento.status === 'concluido'">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Data de Conclusão</label>
-                <input 
-                  v-model="evento.dataFim" 
-                  type="date" 
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
-                />
-              </div>
+              <p v-if="pontos.length === 0 && poligonos.length === 0" class="text-sm text-gray-500">
+                Nenhum elemento adicionado ainda. Use o mapa para adicionar pontos ou polígonos.
+              </p>
             </div>
           </div>
         </div>
 
-        <!-- Mapa e Elementos Geográficos -->
-        <div class="lg:col-span-2">
-          <div class="bg-white rounded-lg shadow p-6">
-            <h2 class="text-lg font-medium text-gray-900 mb-4">Localização</h2>
-            
-            <div class="h-[500px] rounded-lg overflow-hidden mb-6">
-              <InteractiveMap 
-                :pontos="evento.pontos"
-                :poligonos="evento.poligonos"
-                @ponto-adicionado="handlePontoAdicionado"
-                @poligono-adicionado="handlePoligonoAdicionado"
-                @ponto-removido="handlePontoRemovido"
-                @poligono-removido="handlePoligonoRemovido"
-              />
-            </div>
+        <div class="bg-white rounded-lg shadow-md p-6">
+          <h2 class="text-xl font-bold mb-4 text-green-800">Mapa</h2>
+          <!-- Add your map component here -->
+          <div class="h-[600px] bg-gray-100 rounded-lg flex items-center justify-center">
+      <!--      <ReadOnlyMap :ocorrencias="[ocorrencia]" /> -->
+            <InteractiveMap 
+            :ocorrencias="[ocorrencia]"
+            @point-added="handlePointAdded"
+            @polygon-added="handlePolygonAdded"
 
-            <!-- Lista de Pontos -->
-            <div v-if="evento.pontos.length > 0" class="mb-6">
-              <h3 class="text-sm font-medium text-gray-700 mb-2">Pontos Registrados</h3>
-              <div class="space-y-2">
-                <div 
-                  v-for="ponto in evento.pontos" 
-                  :key="ponto.id"
-                  class="flex items-center justify-between p-2 bg-gray-50 rounded-md"
-                >
-                  <div class="flex items-center gap-2">
-                    <MapPin class="h-4 w-4 text-green-600" />
-                    <span class="text-sm">{{ ponto.descricao || `Ponto ${ponto.id}` }}</span>
-                  </div>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    class="text-red-500 hover:text-red-700"
-                    @click="handlePontoRemovido(ponto.id)"
-                  >
-                    <Trash2 class="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Lista de Polígonos -->
-            <div v-if="evento.poligonos.length > 0">
-              <h3 class="text-sm font-medium text-gray-700 mb-2">Polígonos Registrados</h3>
-              <div class="space-y-2">
-                <div 
-                  v-for="poligono in evento.poligonos" 
-                  :key="poligono.id"
-                  class="flex items-center justify-between p-2 bg-gray-50 rounded-md"
-                >
-                  <div class="flex items-center gap-2">
-                    <Shapes class="h-4 w-4 text-green-600" />
-                    <span class="text-sm">{{ poligono.descricao || `Polígono ${poligono.id}` }}</span>
-                  </div>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    class="text-red-500 hover:text-red-700"
-                    @click="handlePoligonoRemovido(poligono.id)"
-                  >
-                    <Trash2 class="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </div>
+          />
           </div>
+        </div>
+
+        <div class="lg:col-span-2">
+          <Button @click="handleSalvar" class="w-full bg-green-700 hover:bg-green-800 text-white">
+            Salvar Ocorrência
+          </Button>
         </div>
       </div>
     </main>
   </div>
-</template> 
+</template>
+
+
+<style scoped>
+.criar-ocorrencia-container {
+  min-height: 100vh;
+  background-color: #f0fdf4;
+}
+</style> 
+
+

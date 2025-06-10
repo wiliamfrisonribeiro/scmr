@@ -6,7 +6,7 @@ import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer';
 import Graphic from '@arcgis/core/Graphic';
 import { Polygon } from '@arcgis/core/geometry';
 import { SimpleFillSymbol } from '@arcgis/core/symbols';
-
+import Search from "@arcgis/core/widgets/Search.js";
 const props = defineProps<{
   ocorrencias: any[]; // Você pode tipar melhor depois
 }>();
@@ -22,7 +22,7 @@ onMounted(() => {
   const graphicsLayer = new GraphicsLayer();
 
   const map = new Map({
-    basemap: 'streets-vector',
+    basemap: 'osm',
     layers: [graphicsLayer],
   });
 
@@ -38,6 +38,7 @@ onMounted(() => {
   view.when(() => {
     
     props.ocorrencias.forEach((ocorrencia) => {
+    
       let geometryData;
 
       try {
@@ -91,6 +92,17 @@ onMounted(() => {
         graphicsLayer.add(polygonGraphic);
       }
     });
+
+
+    const searchWidget = new Search({
+  view: view
+});
+
+view.ui.add(searchWidget, {
+  position: "top-left",
+  index: 2
+});
+
   });
 });
 </script>

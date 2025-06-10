@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { Button } from '@/components/ui/button';
 import { MapPin, FileText, BarChart2, Users, Calendar, ChevronRight, Info } from 'lucide-vue-next';
-
+import { fetchOcorrenciasAll } from '@/services/ocorrencias/ocorrencias';
 import ReadOnlyMap from '@/components/ReadOnlyMap.vue';
 
 const router = useRouter();
 
+const ocorrencias = ref([])
+const isLoading = ref(true);
+const totalOcorrencias = ref(0)
 
 const navigateToDashboard = () => {
   router.push('/dashboard');
@@ -24,7 +27,7 @@ const navigateToLogin = () => {
 // Dados de exemplo para as estatísticas
 const estatisticas = ref([
   { id: 1, titulo: 'Ocorrências Registradas', valor: '1.245', icone: MapPin, cor: 'bg-green-700' },
-  { id: 2, titulo: 'Relatórios Gerados', valor: '856', icone: FileText, cor: 'bg-green-600' },
+
   { id: 3, titulo: 'Análises Realizadas', valor: '432', icone: BarChart2, cor: 'bg-green-800' },
   { id: 4, titulo: 'Usuários Ativos', valor: '78', icone: Users, cor: 'bg-green-500' },
 ]);
@@ -90,16 +93,76 @@ const proximosEventos = ref([
 const sobreNos = ref({
   titulo: 'Sobre o Sistema de Monitoramento',
   descricao: 'O Sistema de Monitoramento de Ocorrências é uma plataforma colaborativa desenvolvida para facilitar o registro, acompanhamento e análise de situações críticas no meio rural em todo o território nacional.',
-  missao: 'Nossa missão é fornecer uma ferramenta eficiente para monitoramento ambiental, promovendo a transparência e a participação cidadã na proteção do meio ambiente.',
-  visao: 'Ser referência nacional em sistemas de monitoramento ambiental colaborativo, contribuindo para a preservação dos recursos naturais e o desenvolvimento sustentável.',
+  missao: 'Nossa missão é fornecer uma ferramenta eficiente para o registro e monitoramento de ocorrências no meio rural, como alagamentos, incêndios e infestações de pragas. Nosso objetivo é promover a transparência e a participação cidadã na identificação e combate a esses desafios.',
+  visao: 'Nossa missão é fornecer uma ferramenta eficiente para o registro e monitoramento de ocorrências no meio rural, como alagamentos, incêndios e infestações de pragas. Ao fazer isso, almejamos ser referência nacional em sistemas de monitoramento e colaborativo, contribuindo significativamente para a preservação dos recursos naturais e o desenvolvimento sustentável das comunidades rurais e do país',
   valores: [
     'Transparência',
     'Colaboração',
     'Inovação',
-    'Compromisso com o meio ambiente',
+    'Compromisso com o meio rural',
     'Responsabilidade social'
   ]
 });
+
+const filterOcorrencias = async () => {
+  try {
+    isLoading.value = true;
+    const response = await fetchOcorrenciasAll();
+    ocorrencias.value = response.data;
+    const ocorrenciasUltimas: any[] = [];
+    
+    if (response.data && response.data.length > 0) {
+      const ocorrencias = response.data;
+      totalOcorrencias.value = ocorrencias.length;
+      
+      ocorrencias.forEach((ocorrencia: any, index: number) => {
+        if (index < 4) {
+          const ocorrenciaUltima = {
+            id: ocorrencia.id,
+            titulo: ocorrencia.type,
+            data: formatDate(ocorrencia.created_date),
+            local: ocorrencia.description,
+            status: ocorrencia.ocurrency_status
+          };
+          ocorrenciasUltimas.push(ocorrenciaUltima);
+        }
+      });
+      
+      ultimasOcorrencias.value = ocorrenciasUltimas;
+
+      console.log(ocorrenciasUltimas)
+
+      estatisticas.value[0].valor = totalOcorrencias.value.toString();
+
+      const ocorrenciasAnalisadas = ocorrencias.filter((ocorrencia: any) => ocorrencia.ocurrency_status === 'análise');
+     
+
+      estatisticas.value[1].valor = ocorrenciasAnalisadas.length.toString();
+      estatisticas.value[2].valor = totalOcorrencias.value.toString();
+
+      console.log(estatisticas.value)
+    }
+  } catch (error) {
+    console.error('Erro ao buscar ocorrências:', error);
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+onMounted(() => {
+  filterOcorrencias();
+});
+
+
+watch(ultimasOcorrencias, (newVal) => {
+  console.log(newVal)
+})
+
+const formatDate = (date: string) => {
+  if (!date) return '-';
+  return new Date(date).toLocaleString('pt-BR');
+};
+
 </script>
 
 <template>
@@ -121,7 +184,7 @@ const sobreNos = ref({
         </nav>
         <div class="user-actions">
           <Button variant="outline" size="sm" @click="navigateToLogin">Entrar</Button>
-          <Button size="sm">Cadastrar</Button>
+         
         </div>
       </div>
     </header>
@@ -151,7 +214,10 @@ const sobreNos = ref({
             <component :is="stat.icone" class="h-6 w-6 text-white" />
           </div>
           <div class="stat-info">
-            <h3 class="stat-value">{{ stat.valor }}</h3>
+            <h3 class="stat-value">
+              <div v-if="isLoading" class="loading-spinner-small"></div>
+              <span v-else>{{ stat.valor }}</span>
+            </h3>
             <p class="stat-title">{{ stat.titulo }}</p>
           </div>
         </div>
@@ -172,18 +238,24 @@ const sobreNos = ref({
             </Button>
           </div>
           <div class="card-content">
-            <div v-for="ocorrencia in ultimasOcorrencias" :key="ocorrencia.id" class="list-item">
-              <div class="item-icon">
-                <MapPin class="h-5 w-5 text-blue-500" />
-              </div>
-              <div class="item-details">
-                <h3 class="item-title">{{ ocorrencia.titulo }}</h3>
-                <p class="item-location">{{ ocorrencia.local }}</p>
-                <div class="item-meta">
-                  <span class="item-date">{{ ocorrencia.data }}</span>
-                  <span :class="['item-status', `status-${ocorrencia.status.toLowerCase().replace(' ', '-')}`]">
-                    {{ ocorrencia.status }}
-                  </span>
+            <div v-if="isLoading" class="loading-container">
+              <div class="loading-spinner"></div>
+              <p class="loading-text">Carregando ocorrências...</p>
+            </div>
+            <div v-else>
+              <div v-for="ocorrencia in ultimasOcorrencias" :key="ocorrencia.id" class="list-item">
+                <div class="item-icon">
+                  <MapPin class="h-5 w-5 text-blue-500" />
+                </div>
+                <div class="item-details">
+                  <h3 class="item-title">{{ ocorrencia.titulo }}</h3>
+                  <p class="item-location">{{ ocorrencia.local }}</p>
+                  <div class="item-meta">
+                    <span class="item-date">{{ ocorrencia.data }}</span>
+                     <span :class="['item-status', `status-${ocorrencia.status.toLowerCase().replace(' ', '-')}`]">
+                      {{ ocorrencia.status }}
+                    </span> 
+                  </div>
                 </div>
               </div>
             </div>
@@ -193,7 +265,7 @@ const sobreNos = ref({
         <!-- Próximos eventos -->
         <section class="content-card">
           <div class="card-header">
-            <h2>Próximos Eventos</h2>
+            <h2>Ultimas ocorrências Analisadas</h2>
             <Button variant="ghost" size="sm" class="view-all">
               Ver todos <ChevronRight class="h-4 w-4" />
             </Button>
@@ -225,8 +297,12 @@ const sobreNos = ref({
           <h2 class="section-title">Mapa de Ocorrências</h2>
           <p class="section-description">Visualize todas as ocorrências registradas no sistema</p>
         </div>
-        <div class="map-wrapper">
-          <ReadOnlyMap />
+          <div class="map-wrapper">
+            <div v-if="isLoading" class="loading-container">
+              <div class="loading-spinner"></div>
+              <p class="loading-text">Carregando mapa...</p>
+            </div>
+            <ReadOnlyMap v-else :ocorrencias="ocorrencias" />
         </div>
       </div>
     </section>
@@ -275,9 +351,9 @@ const sobreNos = ref({
     <footer class="footer">
       <div class="footer-content">
         <div class="footer-logo">
-          <img src="" alt="Logo" class="footer-logo-img" />
+       
           <p class="footer-description">
-            Sistema de Monitoramento de Ocorrências Ambientais
+            Sistema Colaborativo de Monitoramento de situações críticas no meio rural
           </p>
         </div>
         <div class="footer-links">
@@ -294,24 +370,15 @@ const sobreNos = ref({
             <h3>Serviços</h3>
             <ul>
               <li><a href="#">Ocorrências</a></li>
-              <li><a href="#">Relatórios</a></li>
               <li><a href="#">Mapas</a></li>
-              <li><a href="#">API</a></li>
+         
             </ul>
           </div>
-          <div class="footer-column">
-            <h3>Suporte</h3>
-            <ul>
-              <li><a href="#">Ajuda</a></li>
-              <li><a href="#">FAQ</a></li>
-              <li><a href="#">Documentação</a></li>
-              <li><a href="#">Fale Conosco</a></li>
-            </ul>
-          </div>
+   
         </div>
       </div>
       <div class="footer-bottom">
-        <p>&copy; 2023 Sistema de Monitoramento de Ocorrências. Todos os direitos reservados.</p>
+        <p>&copy; 2025 Sistema Colaborativo de Monitoramento de situações críticas no meio rural. Todos os direitos reservados.</p>
       </div>
     </footer>
   </div>
@@ -460,6 +527,10 @@ const sobreNos = ref({
 }
 
 .stat-value {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 1.5rem;
   font-weight: 700;
   color: #2d3748;
@@ -586,6 +657,11 @@ const sobreNos = ref({
 .status-concluído {
   background-color: #d1fae5;
   color: #059669;
+}
+
+.status-pendente {
+  background-color: #fef3c7;
+  color: #d97706;
 }
 
 .item-type {
@@ -813,5 +889,44 @@ const sobreNos = ref({
   .about-content {
     grid-template-columns: 1fr;
   }
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  width: 100%;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #2f855a;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+.loading-text {
+  color: #4a5568;
+  font-size: 0.875rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-spinner-small {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #2f855a;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto;
 }
 </style> 

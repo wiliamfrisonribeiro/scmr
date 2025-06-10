@@ -1,38 +1,55 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { MapPin, Users, Calendar, AlertTriangle, BarChart2, FileText } from 'lucide-vue-next';
+
 const props = defineProps<{
-  ocorrencias: any[];
+  totalOcorrencias: number; 
+  totalAnalisadas: number;
 }>();
+
+const total = ref(0);
+const totalAnalisadas = ref(0);
 // Dados simulados para os cards
-const infoCards = ref([])
-onMounted(() => {
-  console.log("ocorrencias",   props.ocorrencias.length) 
+const infoCards = computed(() => [
+  {
+    id: 1,
+    title: 'Ocorrências Registradas',
+    value: total.value || 0,  
+    icon: MapPin,
+    color: 'bg-green-700'
+  },
+  {
+    id: 3,
+    title: 'Análises',
+    value: totalAnalisadas.value || 0,
+    icon: BarChart2,
+    color: 'bg-green-800'
+  }
+]);
 
-  debugger
-  infoCards.value = [
-    {
-      id:1,
-      title: 'Ocorrências Registradas',
-      value: props.ocorrencias.length,
-      icon: MapPin,
-      color: 'bg-green-700'
-    },
-
-    {
-      id:2   ,
-      title: 'Análises',
-      value: props.ocorrencias.length,
-      icon: MapPin,
-      color: 'bg-green-700'
+watch(
+  () => props.totalOcorrencias,
+  (newVal) => {
+    debugger
+    if (typeof newVal === 'number') {
+      
+      total.value = newVal;
     }
-  ]
-})
+  },
+  { immediate: true }
+);
 
-console.log("ocorrencias",   props.ocorrencias.length)
-
-
-
+watch(
+  () => props.totalAnalisadas,
+  (newVal) => {
+    
+    if (typeof newVal === 'number') {
+      
+      totalAnalisadas.value = newVal;
+    }
+  },
+  { immediate: true }
+);
 </script>
 
 <template>

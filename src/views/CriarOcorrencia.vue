@@ -13,6 +13,7 @@ const token = ref('');
 const titulo = ref('');
 const descricao = ref('');
 const tipo = ref('');
+const tipoOutro = ref('');
 const imagem = ref<File | null>(null);
 const imagemPreview = ref<string | null>(null);
 const pontos = ref<{ x: number; y: number; descricao: string }[]>([]);
@@ -62,12 +63,10 @@ const handleSalvar = async () => {
     myHeaders.append("Content-Type", "application/json");
     myHeaders.append("Accept", "application/json");
     myHeaders.append("Authorization", `Bearer ${token.value}`);
-    console.log(userAccountId)
-    debugger
-    console.log(geometry.value);
+
     const raw = JSON.stringify({
       description: descricao.value,
-      type: tipo.value,
+      type: tipo.value === 'outro' ? tipoOutro.value : tipo.value,
       title: titulo.value,
       location: geometry.value,
       ocurrency_status: 'pendente',
@@ -75,7 +74,7 @@ const handleSalvar = async () => {
       opinion_account_id: userAccountId.value
     });
 
-    const requestOptions: RequestInit = {
+    const requestOptions = {
       method: "POST",
       headers: myHeaders,
       body: raw
@@ -85,6 +84,43 @@ const handleSalvar = async () => {
     const result = await response.json();
 
     if (response.ok) {
+      // Upload file if there's an image
+      if (imagemPreview.value && imagemPreview.value.startsWith('data:image')) {
+        // Convert base64 to blob
+        const base64Data = imagemPreview.value.split(',')[1];
+        const byteCharacters = atob(base64Data);
+        const byteArrays = [];
+        
+        for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+          const slice = byteCharacters.slice(offset, offset + 512);
+          const byteNumbers = new Array(slice.length);
+          
+          for (let i = 0; i < slice.length; i++) {
+            byteNumbers[i] = slice.charCodeAt(i);
+          }
+          
+          const byteArray = new Uint8Array(byteNumbers);
+          byteArrays.push(byteArray);
+        }
+        
+        const blob = new Blob(byteArrays, { type: 'image/jpeg' });
+        const formData = new FormData();
+        formData.append('file', blob, 'image.jpg');
+
+        const fileHeaders = new Headers();
+        fileHeaders.append("Authorization", `Bearer ${token.value}`);
+
+        const fileResponse = await fetch(`https://smrc.onrender.com/ocurrencies/${result.id}/files`, {
+          method: "POST",
+          headers: fileHeaders,
+          body: formData
+        });
+
+        if (!fileResponse.ok) {
+          console.error('Erro ao fazer upload do arquivo');
+        }
+      }
+
       // Limpar os pontos do mapa
       if (mapRef.value) {
         (mapRef.value as any).clearPoints();
@@ -94,11 +130,11 @@ const handleSalvar = async () => {
       router.push('/dashboard');
     } else {
       console.error('Erro ao salvar ocorrência:', result);
-      // Aqui você pode adicionar uma notificação de erro
+      alert('Erro ao criar ocorrência. Por favor, tente novamente.');
     }
   } catch (error) {
     console.error('Erro ao salvar ocorrência:', error);
-    // Aqui você pode adicionar uma notificação de erro
+    alert('Erro ao criar ocorrência. Por favor, tente novamente.');
   }
 };
 
@@ -184,13 +220,24 @@ const handlePolygonAdded = (data: { type: string; geometry: string }) => {
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
             >
               <option value="">Selecione o tipo</option>
-              <option value="alagamento">Alagamento</option>
-              <option value="deslizamento">Deslizamento</option>
-              <option value="incendio">Incêndio</option>
-              <option value="acidente">Acidente</option>
-              <option value="pragas">Pragas</option>
+              <option value="Alagamento">Alagamento</option>
+              <option value="Deslizamento">Deslizamento</option>
+              <option value="Incêndio">Incêndio</option>
+              <option value="Acidente">Acidente</option>
+              <option value="Pragas">Pragas</option>
               <option value="outro">Outro</option>
             </select>
+          </div>
+
+          <div v-if="tipo === 'outro'" class="mb-4">
+            <label for="tipoOutro" class="block text-sm font-medium text-gray-700 mb-1">Especifique o tipo</label>
+            <input
+              type="text"
+              id="tipoOutro"
+              v-model="tipoOutro"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
+              placeholder="Digite o tipo de ocorrência"
+            />
           </div>
 
           <div class="mb-4">

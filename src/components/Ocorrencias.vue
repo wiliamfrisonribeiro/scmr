@@ -1,19 +1,17 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import { AlertCircle, Clock, CheckCircle, XCircle, Pencil, Trash2 } from 'lucide-vue-next';
-
+import { useRouter } from 'vue-router';
 const props = defineProps({
   ocorrencias: { type: Array, default: () => [] },
   loadOcorrencias: { type: Function, default: null },
   loadingOcorrencias: { type: Boolean, default: false }
 });
-
+const router = useRouter();
 const localOcorrencias = ref([])
 
 const loading = ref(props.loadingOcorrencias)
 
-
-debugger
 console.log("ocorrencias", props.ocorrencias)
 
 const formatDate = (date) => {
@@ -42,8 +40,9 @@ const getStatusIcon = (status) => {
 };
 
 const handleEdit = (ocorrencia) => {
-  // Implemente a navegação ou lógica de edição aqui
-  alert('Editar ocorrência: ' + ocorrencia.id);
+
+  router.push(`/editar-ocorrencia/${ocorrencia.id}`);
+
 };
 
 const handleDelete = async (ocorrencia) => {
@@ -81,7 +80,6 @@ watch(
   () => props.ocorrencias,
   (newVal) => {
 
-    debugger
     localOcorrencias.value = newVal;
   },
   { immediate: true }

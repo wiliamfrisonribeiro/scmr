@@ -14,6 +14,54 @@ export async function fetchOcorrencias(page = 1, pageSize = 5, accountId = '3441
 
   const data = await response.json()
 
-  debugger
   return data
+} 
+
+
+
+export async function fetchOcorrenciaById(id: string) {
+
+  const url = `https://smrc.onrender.com/ocurrencies/${id}`
+
+  const response = await fetch(url)
+
+  const data = await response.json()
+
+  return data
+}
+
+
+export async function fetchOcorrenciasAll() {
+
+  const paginate = createPaginate()
+  .page(1)
+  .limit(10000)
+
+  const url = paginate.buildUrl('https://smrc.onrender.com/ocurrencies')
+
+  const response = await fetch(url)
+
+  const data = await response.json()
+
+  return data
+}
+
+
+export async function fetchOcorrenciasAllUser(accountId: string) {
+
+  const paginate = createPaginate()
+  .page(1)
+  .limit(10000)
+  .equalsAnd('account_id', accountId)
+
+  const url = paginate.buildUrl('https://smrc.onrender.com/ocurrencies')
+
+  const response = await fetch(url)
+
+  const data = await response.json()
+
+  return data
+
+
+
 }

@@ -7,7 +7,7 @@ import ReadOnlyMap from '@/components/ReadOnlyMap.vue';
 import InfoCards from '@/components/InfoCards.vue';
 import EventCards from '@/components/EventCards.vue';
 import { Button } from '@/components/ui/button';
-import { fetchOcorrencias } from '@/services/ocorrencias/ocorrencias.ts';
+import { fetchOcorrencias, fetchOcorrenciasAllUser } from '@/services/ocorrencias/ocorrencias.ts';
 import Ocorrencias from '@/components/Ocorrencias.vue';
 import { useUser } from '@/composables/useUser';
 
@@ -17,6 +17,8 @@ const totalPages = ref(1);
 const page = ref(1);
 const pageSize = 5;
 const loadingOcorrencias = ref(false);
+const totalOcorrencias = ref(0);
+const totalAnalisadas = ref(0);
 
 const { userAccountId } = useUser();
 
@@ -24,6 +26,7 @@ const { userAccountId } = useUser();
 async function loadOcorrencias() {
   loadingOcorrencias.value = true;
   const response = await fetchOcorrencias(page.value, pageSize, userAccountId.value);
+  //await fetchOcorrenciasAllUser();
   ocorrencias.value = response.data;
 
   console.log("ocorrencias", ocorrencias.value)
@@ -31,8 +34,8 @@ async function loadOcorrencias() {
   loadingOcorrencias.value = false;
 }
 
-onMounted(loadOcorrencias);
-watch(page, loadOcorrencias);
+//onMounted(loadOcorrencias);
+
 
 const nextPage = () => { if (page.value < totalPages.value) page.value++; };
 const prevPage = () => { if (page.value > 1) page.value--; };
@@ -45,6 +48,33 @@ const handleLogout = () => {
   logout();
   router.push('/');
 };
+
+
+const formatDate = (date) => {
+  if (!date) return '-';
+  return new Date(date).toLocaleString('pt-BR');
+};
+
+const fetchOcorrenciasTotalOcorrencias = async () => {
+  
+  const response = await fetchOcorrenciasAllUser(userAccountId.value);
+  
+  totalOcorrencias.value = response.total;
+
+  const ocorrenciasAnalisadas = response.data.filter(ocorrencia => ocorrencia.ocurrency_status === 'análise');
+  totalAnalisadas.value = ocorrenciasAnalisadas.length;
+
+
+}
+ onMounted(() => {
+  fetchOcorrenciasTotalOcorrencias();
+  loadOcorrencias();
+ })
+
+ watch(page, loadOcorrencias);
+
+
+
 </script>
 
 <template>
@@ -81,7 +111,7 @@ const handleLogout = () => {
         </div>
         <!-- Coluna lateral -->
         <div class="lg:w-1/3">
-          <InfoCards :ocorrencias="ocorrencias" />
+          <InfoCards :totalOcorrencias="totalOcorrencias" :totalAnalisadas="totalAnalisadas" />
           <div class="flex justify-end gap-2 mb-2">
             <button class="px-3 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300" @click="prevPage">
               Anterior

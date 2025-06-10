@@ -10,8 +10,20 @@ import MapView from '@arcgis/core/views/MapView'
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import Home from '@arcgis/core/widgets/Home'
 import Sketch from '@arcgis/core/widgets/Sketch'
+import { Polygon } from '@arcgis/core/geometry'
+import { SimpleFillSymbol } from '@arcgis/core/symbols'
+import Graphic from '@arcgis/core/Graphic'
+
+
 
 const emit = defineEmits(['point-added', 'polygon-added']);
+
+const props = defineProps({
+  ocorrencias: {
+    type: Array,
+    required: false
+  }
+})
 
 // ✅ Sua API Key
 esriConfig.apiKey = 'AAPTxy8BH1VEsoebNVZXo8HurGmqqIlr3TBprlsff3Mud5GOjsXtvQaQaJyhnOKZ07m3xrQhk6R6SRuVvQ8q9wJ4Pjd4XFufKKct8Jt3JhlNbH9rpzxoqRxKjFCNhFdL3HFerQyLsYDUirkfe6-4WktboS0iiecgZpqu-3iHJIBbGPWqOtLnuvKdq-PbQSOwN6V28DusnChUNi21eqm19XwZGhWKkt6aigaDBrUrZgYmHSY.AT1_YjOrnQiE'
@@ -22,7 +34,7 @@ onMounted(() => {
   const graphicsLayer = new GraphicsLayer()
 
   const map = new Map({
-    basemap: 'topo-vector',
+    basemap: 'osm',
     layers: [graphicsLayer]
   })
 
@@ -74,24 +86,70 @@ onMounted(() => {
         }
       }
     })
-  })
+
+
+    if (props.ocorrencias) {
+      props.ocorrencias.forEach(ocorrencia => {
+        let geometryData;
+
+        try {
+          geometryData = typeof ocorrencia.location === 'string'
+            ? JSON.parse(ocorrencia.location)
+            : ocorrencia.location;
+        } catch (e) {
+          console.warn('Erro ao converter location', ocorrencia.location, e);
+          return;
+        }
+
+        if (geometryData?.rings) {
+          const polygon = new Polygon(geometryData);
+
+          const symbol = new SimpleFillSymbol({
+            color: [227, 139, 79, 0.6],
+            outline: {
+              color: [255, 255, 255],
+              width: 1,
+            },
+          });
+
+          const polygonGraphic = new Graphic({  
+            geometry: polygon,
+            symbol,
+            attributes: {
+              tipo: ocorrencia.type || 'Ocorrência sem título',
+              descricao: ocorrencia.descricao || 'Sem descrição disponível',
+              criadopor: ocorrencia.account_name || 'Sem nome de conta disponível',
+              parecer: ocorrencia.opinion || 'Sem parecer disponível',
+              respondidopor: ocorrencia.opinion || 'Não respondido',
+              status: ocorrencia.ocurrency_status || 'Pendente',
+              created_at: ocorrencia.created_date || 'Sem data de criação disponível',
+              updated_at: ocorrencia.updated_date || 'Sem data de atualização disponível',
+            },    
+          });
+
+          graphicsLayer.add(polygonGraphic);
+        }
+      });
+    } 
+  }); 
 })
 
-function geometryToGeoJSON(geometry) {
-  
-  if (!geometry) {
-    console.warn('geometryToGeoJSON: geometria inválida')
-    return null
-  }
 
-  try {
-    const geojson = toGeoJSON(geometry)
-    return geojson
-  } catch (error) {
-    console.error('Erro ao converter geometria para GeoJSON:', error)
-    return null
+  function geometryToGeoJSON(geometry) {
+
+    if (!geometry) {
+      console.warn('geometryToGeoJSON: geometria inválida')
+      return null
+    }
+
+    try {
+      const geojson = toGeoJSON(geometry)
+      return geojson
+    } catch (error) {
+      console.error('Erro ao converter geometria para GeoJSON:', error)
+      return null
+    }
   }
-}
 </script>
 
 <style scoped>
@@ -104,6 +162,4 @@ function geometryToGeoJSON(geometry) {
   max-width: 100%;
   margin: 0 auto;
 }
-
 </style>
-
