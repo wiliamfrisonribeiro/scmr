@@ -2,8 +2,8 @@
 import { ref, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { Button } from '@/components/ui/button';
-import { MapPin, FileText, BarChart2, Users, Calendar, ChevronRight, Info } from 'lucide-vue-next';
-import { fetchOcorrenciasAll } from '@/services/ocorrencias/ocorrencias';
+import { MapPin, FileText, BarChart2, Users, Calendar, ChevronRight, Info, BarChart3, BarChart4 } from 'lucide-vue-next';
+import { fetchOcorrenciasAll, fetchOcorrenciasStatus } from '@/services/ocorrencias/ocorrencias';
 import ReadOnlyMap from '@/components/ReadOnlyMap.vue';
 
 const router = useRouter();
@@ -11,7 +11,9 @@ const router = useRouter();
 const ocorrencias = ref([])
 const isLoading = ref(true);
 const totalOcorrencias = ref(0)
-
+const totalOcorrenciasPendentes = ref(0)
+const totalOcorrenciasEmAndamento = ref(0)
+const totalOcorrenciasConcluidas = ref(0)
 const navigateToDashboard = () => {
   router.push('/dashboard');
 };
@@ -29,7 +31,10 @@ const estatisticas = ref([
   { id: 1, titulo: 'Ocorrências Registradas', valor: '1.245', icone: MapPin, cor: 'bg-green-700' },
 
   { id: 3, titulo: 'Análises Realizadas', valor: '432', icone: BarChart2, cor: 'bg-green-800' },
-  { id: 4, titulo: 'Usuários Ativos', valor: '78', icone: Users, cor: 'bg-green-500' },
+  { id: 4, titulo: 'Pendentes', valor: '78', icone: BarChart3, cor: 'bg-green-500' },
+  { id: 5, titulo: 'Em andamento', valor: '78', icone: BarChart4, cor: 'bg-green-500' },
+  { id: 6, titulo: 'Concluídas', valor: '78', icone: BarChart4, cor: 'bg-green-500' },
+  { id: 7, titulo: 'Usuários Ativos', valor: '78', icone: Users, cor: 'bg-green-500' },
 ]);
 
 // Dados de exemplo para as últimas ocorrências
@@ -106,7 +111,8 @@ const sobreNos = ref({
 
 const filterOcorrencias = async () => {
   try {
-    isLoading.value = true;
+  
+      
     const response = await fetchOcorrenciasAll();
     ocorrencias.value = response.data;
     const ocorrenciasUltimas: any[] = [];
@@ -135,6 +141,7 @@ const filterOcorrencias = async () => {
       estatisticas.value[0].valor = totalOcorrencias.value.toString();
 
       const ocorrenciasAnalisadas = ocorrencias.filter((ocorrencia: any) => ocorrencia.ocurrency_status === 'análise');
+      
      
 
       estatisticas.value[1].valor = ocorrenciasAnalisadas.length.toString();
@@ -144,13 +151,48 @@ const filterOcorrencias = async () => {
     }
   } catch (error) {
     console.error('Erro ao buscar ocorrências:', error);
-  } finally {
-    isLoading.value = false;
   }
 };
 
-onMounted(() => {
-  filterOcorrencias();
+const fetchOcorrencasPendentes = async () => {
+  const response = await fetchOcorrenciasStatus('pendente');
+  console.log("ocorrenciasPendentes", response)
+  const total = response.total;
+  totalOcorrenciasPendentes.value = total;
+  estatisticas.value[3].valor = totalOcorrenciasPendentes.value.toString();
+ 
+}
+
+const fetchOcorrenciasEmAndamento = async () => {
+  const response = await fetchOcorrenciasStatus('em andamento');
+  console.log("ocorrenciasEmAndamento", response)
+  const total = response.total;
+  totalOcorrenciasEmAndamento.value = total;
+  estatisticas.value[3].valor = totalOcorrenciasEmAndamento.value.toString();
+}
+
+
+const fetchOcorrenciasConcluidas = async () => {
+  const response = await fetchOcorrenciasStatus('concluído');
+  console.log("ocorrenciasConcluidas", response)
+  const total = response.total;
+  totalOcorrenciasConcluidas.value = total;
+  estatisticas.value[4].valor = totalOcorrenciasConcluidas.value.toString();
+}
+
+
+
+
+onMounted(async () => {
+  try {
+    isLoading.value = true;
+ await filterOcorrencias();
+ await fetchOcorrencasPendentes();
+ await fetchOcorrenciasEmAndamento();
+ await fetchOcorrenciasConcluidas();
+  } finally {
+    isLoading.value = false;
+  }
 });
 
 

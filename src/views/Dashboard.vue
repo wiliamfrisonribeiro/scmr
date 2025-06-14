@@ -19,13 +19,21 @@ const pageSize = 5;
 const loadingOcorrencias = ref(false);
 const totalOcorrencias = ref(0);
 const totalAnalisadas = ref(0);
+const selectedStatus = ref('todos');
+
+const statusOptions = [
+  { value: 'todos', label: 'Todos' },
+  { value: 'pendente', label: 'Pendente' },
+  { value: 'análise', label: 'Em Análise' },
+  { value: 'em_andamento', label: 'Em Andamento' },
+  { value: 'concluído', label: 'Concluído' }
+];
 
 const { userAccountId } = useUser();
 
-
 async function loadOcorrencias() {
   loadingOcorrencias.value = true;
-  const response = await fetchOcorrencias(page.value, pageSize, userAccountId.value);
+  const response = await fetchOcorrencias(page.value, pageSize, userAccountId.value, selectedStatus.value);
   //await fetchOcorrenciasAllUser();
   ocorrencias.value = response.data;
 
@@ -35,7 +43,6 @@ async function loadOcorrencias() {
 }
 
 //onMounted(loadOcorrencias);
-
 
 const nextPage = () => { if (page.value < totalPages.value) page.value++; };
 const prevPage = () => { if (page.value > 1) page.value--; };
@@ -48,7 +55,6 @@ const handleLogout = () => {
   logout();
   router.push('/');
 };
-
 
 const formatDate = (date) => {
   if (!date) return '-';
@@ -63,17 +69,17 @@ const fetchOcorrenciasTotalOcorrencias = async () => {
 
   const ocorrenciasAnalisadas = response.data.filter(ocorrencia => ocorrencia.ocurrency_status === 'análise');
   totalAnalisadas.value = ocorrenciasAnalisadas.length;
-
-
 }
- onMounted(() => {
+
+onMounted(() => {
   fetchOcorrenciasTotalOcorrencias();
   loadOcorrencias();
- })
+})
 
- watch(page, loadOcorrencias);
-
-
+watch([page, selectedStatus], () => {
+  page.value = 1; // Reset to first page when filter changes
+  loadOcorrencias();
+});
 
 </script>
 
@@ -106,12 +112,33 @@ const fetchOcorrenciasTotalOcorrencias = async () => {
               </svg>
               <span class="text-green-700 font-medium">Carregando ocorrências...</span>
             </div>
+            <div v-else-if="!ocorrencias || ocorrencias.length === 0" class="flex flex-col items-center justify-center py-8 bg-white rounded-lg shadow-md">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p class="text-gray-600 text-lg font-medium">Nenhuma ocorrência encontrada</p>
+              <p class="text-gray-500 text-sm mt-2">Tente alterar os filtros ou criar uma nova ocorrência</p>
+            </div>
             <ReadOnlyMap v-else :ocorrencias="ocorrencias" />
           </div>
         </div>
         <!-- Coluna lateral -->
         <div class="lg:w-1/3">
           <InfoCards :totalOcorrencias="totalOcorrencias" :totalAnalisadas="totalAnalisadas" />
+          
+          <!-- Filtro de Status -->
+          <div class="bg-white rounded-lg shadow-md p-4 mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Filtrar por Status</label>
+            <select 
+              v-model="selectedStatus"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+            >
+              <option v-for="option in statusOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+
           <div class="flex justify-end gap-2 mb-2">
             <button class="px-3 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300" @click="prevPage">
               Anterior

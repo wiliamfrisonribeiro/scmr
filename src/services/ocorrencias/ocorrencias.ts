@@ -3,18 +3,23 @@ import { createPaginate } from 'js-query-pagination';
 
 
 
-export async function fetchOcorrencias(page = 1, pageSize = 5, accountId = '3441d761-b01a-4d6d-854f-62511bfbe453') {
+export async function fetchOcorrencias(page = 1, pageSize = 5, accountId = '3441d761-b01a-4d6d-854f-62511bfbe453', status = 'todos') {
   const paginate = createPaginate()
-  .page(page)
-  .limit(pageSize).equalsAnd('account_id', accountId)
+    .page(page)
+    .limit(pageSize)
+    .equalsAnd('account_id', accountId)
+    .sort('-created_date');
 
-  const url = paginate.buildUrl('https://smrc.onrender.com/ocurrencies')
+  if (status !== 'todos') {
+    paginate.equalsAnd('ocurrency_status', status);
+  }
 
-  const response = await fetch(url)
+  const url = paginate.buildUrl('https://smrc.onrender.com/ocurrencies');
 
-  const data = await response.json()
+  const response = await fetch(url);
+  const data = await response.json();
 
-  return data
+  return data;
 } 
 
 
@@ -35,7 +40,7 @@ export async function fetchOcorrenciasAll() {
 
   const paginate = createPaginate()
   .page(1)
-  .limit(10000)
+  .limit(10000).sort('-created_date')
 
   const url = paginate.buildUrl('https://smrc.onrender.com/ocurrencies')
 
@@ -61,7 +66,21 @@ export async function fetchOcorrenciasAllUser(accountId: string) {
   const data = await response.json()
 
   return data
+}
 
 
+
+export async function fetchOcorrenciasStatus(status: string) {
+  const paginate = createPaginate()
+  .page(1)
+  .limit(10000).equalsAnd('ocurrency_status', status).sort('-created_date')
+
+  const url = paginate.buildUrl('https://smrc.onrender.com/ocurrencies')
+
+  const response = await fetch(url)
+
+  const data = await response.json()
+
+  return data
 
 }

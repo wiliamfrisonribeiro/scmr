@@ -6,6 +6,7 @@ import InteractiveMap from '@/components/InteractiveMap.vue';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, MapPin, Shapes, Trash2, Upload } from 'lucide-vue-next';
 import { useUser } from '@/composables/useUser';
+import ValidationModal from '@/components/ValidationModal.vue';
 
 const router = useRouter();
 const { userAccountId } = useUser();
@@ -20,6 +21,10 @@ const pontos = ref<{ x: number; y: number; descricao: string }[]>([]);
 const poligonos = ref<{ rings: number[][][]; descricao: string }[]>([]);
 const mapRef = ref<InstanceType<typeof InteractiveMap> | null>(null);
 const geometry = ref<any>(null);
+const isLoading = ref(false);
+const submitted = ref(false);
+const showValidationModal = ref(false);
+const validationErrors = ref<string[]>([]);
 
 onMounted(() => {
   const storedToken = localStorage.getItem('token');
@@ -54,6 +59,28 @@ const handleVoltar = () => {
 
 const handleSalvar = async () => {
   try {
+    submitted.value = true;
+    validationErrors.value = [];
+    
+    // Validação dos campos obrigatórios
+    if (!tipo.value) {
+      validationErrors.value.push('Selecione o tipo da ocorrência');
+    }
+
+    if (tipo.value === 'outro' && !tipoOutro.value) {
+      validationErrors.value.push('Especifique o tipo da ocorrência');
+    }
+
+    if (!geometry.value) {
+      validationErrors.value.push('Adicione um ponto ou polígono no mapa');
+    }
+
+    if (validationErrors.value.length > 0) {
+      showValidationModal.value = true;
+      return;
+    }
+
+    isLoading.value = true;
     if (!token.value) {
       router.push('/login');
       return;
@@ -135,6 +162,8 @@ const handleSalvar = async () => {
   } catch (error) {
     console.error('Erro ao salvar ocorrência:', error);
     alert('Erro ao criar ocorrência. Por favor, tente novamente.');
+  } finally {
+    isLoading.value = false;
   }
 };
 
@@ -185,6 +214,11 @@ const handlePolygonAdded = (data: { type: string; geometry: string }) => {
 <template>
   <div class="criar-ocorrencia-container">
     <AppBar />
+    <ValidationModal 
+      :is-open="showValidationModal"
+      :errors="validationErrors"
+      @close="showValidationModal = false"
+    />
     
     <main class="container mx-auto px-4 py-6">
       <div class="flex items-center mb-6">
@@ -201,43 +235,49 @@ const handlePolygonAdded = (data: { type: string; geometry: string }) => {
         <div class="bg-white rounded-lg shadow-md p-2">
           <h2 class="text-xl font-bold mb-4 text-green-800">Informações da Ocorrência</h2>
           
-          <div class="mb-4">
-            <label for="titulo" class="block text-sm font-medium text-gray-700 mb-1">Título</label>
-            <input
-              id="titulo"
-              v-model="titulo"
-              type="text"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
-              placeholder="Digite o título da ocorrência"
-            />
-          </div>
+    
 
           <div class="mb-4">
-            <label for="tipo" class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+            <label for="tipo" class="block text-sm font-medium text-gray-700 mb-1">
+              Tipo <span class="text-red-500">*</span>
+            </label>
             <select
               id="tipo"
               v-model="tipo"
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
+              :class="{ 'border-red-500': !tipo && submitted }"
             >
               <option value="">Selecione o tipo</option>
               <option value="Alagamento">Alagamento</option>
               <option value="Deslizamento">Deslizamento</option>
-              <option value="Incêndio">Incêndio</option>
-              <option value="Acidente">Acidente</option>
-              <option value="Pragas">Pragas</option>
+              <option value="Incêndio">Incêndios</option>
+              <option value="Estiagem">Estiagem</option>
+              <option value="Infestações/Pragas de animais">Infestações/Pragas de animais</option>
+              <option value="Secas">Secas</option>
+              <option value="Inundações">Inundações</option>
+              <option value="Tempestades">Tempestades</option>
               <option value="outro">Outro</option>
             </select>
+            <p v-if="!tipo && submitted" class="mt-1 text-sm text-red-500">
+              Este campo é obrigatório
+            </p>
           </div>
 
           <div v-if="tipo === 'outro'" class="mb-4">
-            <label for="tipoOutro" class="block text-sm font-medium text-gray-700 mb-1">Especifique o tipo</label>
+            <label for="tipoOutro" class="block text-sm font-medium text-gray-700 mb-1">
+              Especifique o tipo <span class="text-red-500">*</span>
+            </label>
             <input
               type="text"
               id="tipoOutro"
               v-model="tipoOutro"
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
+              :class="{ 'border-red-500': tipo === 'outro' && !tipoOutro && submitted }"
               placeholder="Digite o tipo de ocorrência"
             />
+            <p v-if="tipo === 'outro' && !tipoOutro && submitted" class="mt-1 text-sm text-red-500">
+              Este campo é obrigatório
+            </p>
           </div>
 
           <div class="mb-4">
@@ -366,16 +406,31 @@ const handlePolygonAdded = (data: { type: string; geometry: string }) => {
             </div>
           </div>
           
-          <Button @click="handleSalvar" class="w-full bg-green-700 hover:bg-green-800 text-white">
-            Salvar Ocorrência
+          <Button 
+            @click="handleSalvar" 
+            class="w-full bg-green-700 hover:bg-green-800 text-white"
+            :disabled="isLoading"
+          >
+            <span v-if="isLoading" class="flex items-center justify-center">
+              <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Salvando...
+            </span>
+            <span v-else>Salvar Ocorrência</span>
           </Button>
         </div>
             <!-- Mapa -->
-    <div class="border-2 border-green-700 rounded-lg h-[calc(100vh-100px)]" >
+    <div class="border-2 border-green-700 rounded-lg h-[calc(100vh-100px)]" 
+         :class="{ 'border-red-500': !geometry && submitted }">
           <InteractiveMap 
             @point-added="handlePointAdded"
             @polygon-added="handlePolygonAdded"
           />
+          <p v-if="!geometry && submitted" class="mt-1 text-sm text-red-500">
+            Adicione um ponto ou polígono no mapa
+          </p>
         </div>
     
       </div>

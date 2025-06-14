@@ -7,6 +7,7 @@ import Graphic from '@arcgis/core/Graphic';
 import { Polygon } from '@arcgis/core/geometry';
 import { SimpleFillSymbol } from '@arcgis/core/symbols';
 import Search from "@arcgis/core/widgets/Search.js";
+import esriConfig from '@arcgis/core/config';
 const props = defineProps<{
   ocorrencias: any[]; // Você pode tipar melhor depois
 }>();
@@ -17,6 +18,7 @@ const formatDate = (date: string) => {
 const mapDiv = ref<HTMLDivElement | null>(null);
 
 onMounted(() => {
+  esriConfig.request.useIdentity = false;
   if (!mapDiv.value) return;
 
   const graphicsLayer = new GraphicsLayer();
@@ -36,9 +38,9 @@ onMounted(() => {
 
 
   view.when(() => {
-    
+    const polygons: Graphic[] = [];
     props.ocorrencias.forEach((ocorrencia) => {
-    
+
       let geometryData;
 
       try {
@@ -73,11 +75,11 @@ onMounted(() => {
             status: ocorrencia.ocurrency_status || 'Pendente',
             created_at: formatDate(ocorrencia.created_date) || 'Sem data de criação disponível',
             updated_at: formatDate(ocorrencia.updated_date) || 'Sem data de atualização disponível',
-            
+
           },
           popupTemplate: {
-  title: '{tipo}',
-  content: `
+            title: '{tipo}',
+            content: `
     <p><strong>Descrição:</strong> {descricao}</p>
     <p><strong>Criado por:</strong> {criadopor}</p>
     <p><strong>Parecer:</strong> {parecer}</p>
@@ -86,23 +88,34 @@ onMounted(() => {
     <p><strong>Criado em:</strong> {created_at}</p>
     <p><strong>Atualizado em:</strong> {updated_at}</p>
   `
-}
+          }
         });
 
         graphicsLayer.add(polygonGraphic);
+        polygons.push(polygonGraphic);
       }
     });
 
+    if (polygons.length > 0) {
+      view.goTo(polygons[0].geometry,
+        {
+          duration: 1000, // zoom com animação
+          easing: 'ease-in-out'
+        }
+      ).catch((err) => {
+        console.warn('Erro ao aplicar goTo nos polígonos:', err);
+      });
 
-    const searchWidget = new Search({
-  view: view
-});
+      const searchWidget = new Search({
+        view: view
+      });
 
-view.ui.add(searchWidget, {
-  position: "top-left",
-  index: 2
-});
+      view.ui.add(searchWidget, {
+        position: "top-left",
+        index: 2
+      });
 
+    }
   });
 });
 </script>

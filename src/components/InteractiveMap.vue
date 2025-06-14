@@ -2,7 +2,7 @@
   <div ref="mapViewEl" class="map-container"></div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import esriConfig from '@arcgis/core/config'
 import Map from '@arcgis/core/Map'
@@ -13,17 +13,28 @@ import Sketch from '@arcgis/core/widgets/Sketch'
 import { Polygon } from '@arcgis/core/geometry'
 import { SimpleFillSymbol } from '@arcgis/core/symbols'
 import Graphic from '@arcgis/core/Graphic'
+import Search from "@arcgis/core/widgets/Search.js";
 
 
+interface Ocorrencia {
+  location: string | object;
+  type?: string;
+  descricao?: string;
+  account_name?: string;
+  opinion?: string;
+  ocurrency_status?: string;
+  created_date?: string;
+  updated_date?: string;
+}
 
-const emit = defineEmits(['point-added', 'polygon-added']);
+const emit = defineEmits<{
+  'point-added': [{ type: string; geometry: string }];
+  'polygon-added': [{ type: string; geometry: string }];
+}>();
 
-const props = defineProps({
-  ocorrencias: {
-    type: Array,
-    required: false
-  }
-})
+const props = defineProps<{
+  ocorrencias?: Ocorrencia[];
+}>();
 
 // ✅ Sua API Key
 esriConfig.apiKey = 'AAPTxy8BH1VEsoebNVZXo8HurGmqqIlr3TBprlsff3Mud5GOjsXtvQaQaJyhnOKZ07m3xrQhk6R6SRuVvQ8q9wJ4Pjd4XFufKKct8Jt3JhlNbH9rpzxoqRxKjFCNhFdL3HFerQyLsYDUirkfe6-4WktboS0iiecgZpqu-3iHJIBbGPWqOtLnuvKdq-PbQSOwN6V28DusnChUNi21eqm19XwZGhWKkt6aigaDBrUrZgYmHSY.AT1_YjOrnQiE'
@@ -49,6 +60,11 @@ onMounted(() => {
     const homeWidget = new Home({ view })
     view.ui.add(homeWidget, 'top-left')
 
+    const searchWidget = new Search({
+  view: view
+});
+view.ui.add(searchWidget, 'top-left');
+
     const sketch = new Sketch({
       layer: graphicsLayer,
       view: view,
@@ -68,7 +84,7 @@ onMounted(() => {
     view.ui.add(sketch, 'top-left')
 
     sketch.on('create', (event) => {
-      if (event.state === 'complete') {
+      if (event.state === 'complete' && event.graphic?.geometry) {
         const geometry = event.graphic.geometry;
         const geojson = JSON.stringify(geometry);
         console.log('GeoJSON result:', geojson);
@@ -86,7 +102,6 @@ onMounted(() => {
         }
       }
     })
-
 
     if (props.ocorrencias) {
       props.ocorrencias.forEach(ocorrencia => {
@@ -133,23 +148,6 @@ onMounted(() => {
     } 
   }); 
 })
-
-
-  function geometryToGeoJSON(geometry) {
-
-    if (!geometry) {
-      console.warn('geometryToGeoJSON: geometria inválida')
-      return null
-    }
-
-    try {
-      const geojson = toGeoJSON(geometry)
-      return geojson
-    } catch (error) {
-      console.error('Erro ao converter geometria para GeoJSON:', error)
-      return null
-    }
-  }
 </script>
 
 <style scoped>
