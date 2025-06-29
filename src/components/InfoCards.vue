@@ -20,7 +20,7 @@ const infoCards = computed(() => [
   },
   {
     id: 3,
-    title: 'Análises',
+    title: 'Em Análise',
     value: totalAnalisadas.value || 0,
     icon: BarChart2,
     color: 'bg-green-800'

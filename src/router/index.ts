@@ -6,7 +6,9 @@ import MapView from '@/views/MapView.vue'
 import Dashboard from '../views/Dashboard.vue'
 import CriarOcorrencia from '../views/CriarOcorrencia.vue'
 import EditarOcorrencia from '../views/EditarOcorrencia.vue'
+import AnalisarOcorrencia from '../views/AnalisarOcorrencia.vue'
 import { isAuthenticated as checkAuth } from '@/services/auth/auth'
+import { useUser } from '@/composables/useUser'
 
 
 const router = createRouter({
@@ -49,6 +51,12 @@ const router = createRouter({
       name: 'editar-ocorrencia',
       component: EditarOcorrencia,
       meta: { requiresAuth: true }
+    },
+    {
+      path: '/analisar-ocorrencia/:id',
+      name: 'analisar-ocorrencia',
+      component: AnalisarOcorrencia,
+      meta: { requiresAuth: true }
     }
   ]
 })
@@ -65,7 +73,21 @@ router.beforeEach((to, from, next) => {
         query: { redirect: to.fullPath }
       })
     } else {
-      // Usuário autenticado, permitir acesso
+      // Verificar se é uma rota restrita para autoridades
+      if (to.name === 'criar-ocorrencia' || to.name === 'editar-ocorrencia') {
+        // Verificar se o usuário é autoridade
+        const userData = localStorage.getItem('userData');
+        if (userData) {
+          const user = JSON.parse(userData);
+          if (user.account_group_id === 'b9e4f4b8-57cc-43a7-8a54-ebc498bbc58c') {
+            // Usuário é autoridade, redirecionar para dashboard
+            next({ path: '/dashboard' });
+            return;
+          }
+        }
+      }
+      
+      // Usuário autenticado e com permissão, permitir acesso
       next()
     }
   } else {

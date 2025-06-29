@@ -1,21 +1,20 @@
-<script setup >
+<script setup>
 import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { fetchOcorrenciaById } from '@/services/ocorrencias/ocorrencias.ts';
 import AppBar from '@/components/AppBar.vue';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, MapPin, Shapes, Trash2, Upload } from 'lucide-vue-next';
+import { ArrowLeft, MapPin, Shapes, Trash2 } from 'lucide-vue-next';
 import ReadOnlyMap from '@/components/ReadOnlyMap.vue';
 import InteractiveMap from '@/components/InteractiveMap.vue';
 import { useUser } from '@/composables/useUser';
-import ValidationModal from '@/components/ValidationModal.vue';
 
 const router = useRouter();
 const route = useRoute();
 const ocorrencia = ref(null);
 const loading = ref(true);
 const error = ref(null);
-const { userAccountId } = useUser();
+const { userAccountId, isAuthority } = useUser();
 
 const tipo = ref('');
 const descricao = ref('');
@@ -23,14 +22,7 @@ const imagemPreview = ref(null);
 const pontos = ref([]);
 const poligonos = ref([]);
 const documentos = ref([]);
-const status = ref('');
-const opinion = ref('');
 const account_id = ref('');
-const opinion_account_id = ref('');
-const isLoading = ref(false);
-const submitted = ref(false);
-const showValidationModal = ref(false);
-const validationErrors = ref([]);
 
 // Add computed properties for safe access
 const hasDocumentos = computed(() => documentos.value && documentos.value.length > 0);
@@ -74,115 +66,56 @@ const removePoligono = (index) => {
 
 const handleSalvar = async () => {
   try {
-    submitted.value = true;
-    validationErrors.value = [];
-    
-    // Validação dos campos obrigatórios
-    if (!tipo.value) {
-      validationErrors.value.push('Selecione o tipo da ocorrência');
-    }
-
-    if (tipo.value === 'outro' && !tipoOutro.value) {
-      validationErrors.value.push('Especifique o tipo da ocorrência');
-    }
-
-    if (!geometry.value) {
-      validationErrors.value.push('Adicione um ponto ou polígono no mapa');
-    }
-
-    if (validationErrors.value.length > 0) {
-      showValidationModal.value = true;
+    const token = localStorage.getItem('token');
+    if (!token) {
+      alert('Usuário não autenticado!');
       return;
     }
 
-    isLoading.value = true;
-    if (!localStorage.getItem('token')) {
-      router.push('/login');
-      return;
-    }
-
-    const myHeaders = new Headers();
-    myHeaders.append("Content-Type", "application/json");
-    myHeaders.append("Accept", "application/json");
-    myHeaders.append("Authorization", `Bearer ${localStorage.getItem('token')}`);
-
-    const raw = JSON.stringify({
+    // Prepare the occurrence data
+    const occurrenceData = {
+      type: tipo.value,
       description: descricao.value,
-      type: tipo.value === 'outro' ? tipoOutro.value : tipo.value,
-      title: titulo.value,
-      location: geometry.value,
-      ocurrency_status: 'pendente',
-      account_id: userAccountId.value,
-      opinion_account_id: userAccountId.value
-    });
-
-    const requestOptions = {
-      method: "PUT",
-      headers: myHeaders,
-      body: raw
+      account_id: account_id.value,
+      location: JSON.stringify({
+        spatialReference: {
+          latestWkid: 3857,
+          wkid: 102100
+        },
+        rings: poligonos.value[0]?.rings || []
+      })
     };
 
-    const response = await fetch(`https://smrc.onrender.com/ocurrencies/${route.params.id}`, requestOptions);
-    const result = await response.json();
+    // Update occurrence
+    const updateHeaders = new Headers();
+    updateHeaders.append("Content-Type", "application/json");
+    updateHeaders.append("Authorization", `Bearer ${token}`);
 
-    if (response.ok) {
-      // Upload file if there's an image
-      if (imagemPreview.value && imagemPreview.value.startsWith('data:image')) {
-        // Convert base64 to blob
-        const base64Data = imagemPreview.value.split(',')[1];
-        const byteCharacters = atob(base64Data);
-        const byteArrays = [];
-        
-        for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-          const slice = byteCharacters.slice(offset, offset + 512);
-          const byteNumbers = new Array(slice.length);
-          
-          for (let i = 0; i < slice.length; i++) {
-            byteNumbers[i] = slice.charCodeAt(i);
-          }
-          
-          const byteArray = new Uint8Array(byteNumbers);
-          byteArrays.push(byteArray);
-        }
-        
-        const blob = new Blob(byteArrays, { type: 'image/jpeg' });
-        const formData = new FormData();
-        formData.append('file', blob, 'image.jpg');
+    const updateResponse = await fetch(`https://smrc.onrender.com/ocurrencies/${route.params.id}`, {
+      method: "PUT",
+      headers: updateHeaders,
+      body: JSON.stringify(occurrenceData)
+    });
 
-        const fileHeaders = new Headers();
-        fileHeaders.append("Authorization", `Bearer ${localStorage.getItem('token')}`);
-
-        const fileResponse = await fetch(`https://smrc.onrender.com/ocurrencies/${route.params.id}/files`, {
-          method: "POST",
-          headers: fileHeaders,
-          body: formData
-        });
-
-        if (!fileResponse.ok) {
-          console.error('Erro ao fazer upload do arquivo');
-        }
-      }
-
-      // Limpar os pontos do mapa
-      if (mapRef.value) {
-        (mapRef.value).clearPoints();
-      }
-      
-      // Redirecionar para o dashboard
-      router.push('/dashboard');
-    } else {
-      console.error('Erro ao salvar ocorrência:', result);
-      alert('Erro ao editar ocorrência. Por favor, tente novamente.');
+    if (!updateResponse.ok) {
+      throw new Error('Erro ao atualizar ocorrência');
     }
+
+    alert('Ocorrência atualizada com sucesso!');
+    router.back();
   } catch (error) {
-    console.error('Erro ao salvar ocorrência:', error);
-    alert('Erro ao editar ocorrência. Por favor, tente novamente.');
-  } finally {
-    isLoading.value = false;
+    console.error('Erro ao salvar:', error);
+    alert('Erro ao salvar ocorrência. Por favor, tente novamente.');
   }
 };
 
 onMounted(async () => {
+  // Verificar se o usuário é autoridade
+  if (isAuthority.value) {
+    router.push('/dashboard');
+    return;
+  }
+
   loading.value = true;
   try {
     const id = route.params.id;
@@ -196,14 +129,11 @@ onMounted(async () => {
     const data = await fetchOcorrenciaById(id);
     if (data) {
       ocorrencia.value = data;
-      debugger
+      
       // Initialize form fields with ocorrência data
       tipo.value = data.type || '';
       descricao.value = data.description || '';
       account_id.value = data.account_id || '';
-      status.value = data.ocurrency_status || '';
-      opinion.value = data.opinion || '';
-      opinion_account_id.value = data.opinion_account_id || '';
       if (data.image) {
         imagemPreview.value = data.image;
       }
@@ -376,11 +306,6 @@ const downloadDocument = async (doc) => {
 <template>
   <div class="criar-ocorrencia-container">
     <AppBar />
-    <ValidationModal 
-      :is-open="showValidationModal"
-      :errors="validationErrors"
-      @close="showValidationModal = false"
-    />
 
     <main class="container mx-auto px-4 py-6">
       <div class="flex items-center mb-6">
@@ -409,57 +334,19 @@ const downloadDocument = async (doc) => {
           <h2 class="text-xl font-bold mb-4 text-green-800">Informações da Ocorrência</h2>
 
           <div class="mb-4">
-            <label for="tipo" class="block text-sm font-medium text-gray-700 mb-1">
-              Tipo <span class="text-red-500">*</span>
-            </label>
+            <label for="tipo" class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
             <select
               id="tipo"
               v-model="tipo"
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
-              :class="{ 'border-red-500': !tipo && submitted }"
             >
               <option value="">Selecione o tipo</option>
-              <option value="Alagamento">Alagamento</option>
-              <option value="Deslizamento">Deslizamento</option>
-              <option value="Incêndio">Incêndio</option>
-              <option value="Acidente">Acidente</option>
-              <option value="Pragas">Pragas</option>
+              <option value="alagamento">Alagamento</option>
+              <option value="incendio">Incêndio</option>
+              <option value="pragas">Infestação de Pragas</option>
+              <option value="desmatamento">Desmatamento</option>
+              <option value="poluicao">Poluição</option>
               <option value="outro">Outro</option>
-            </select>
-            <p v-if="!tipo && submitted" class="mt-1 text-sm text-red-500">
-              Este campo é obrigatório
-            </p>
-          </div>
-
-          <div v-if="tipo === 'outro'" class="mb-4">
-            <label for="tipoOutro" class="block text-sm font-medium text-gray-700 mb-1">
-              Especifique o tipo <span class="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              id="tipoOutro"
-              v-model="tipoOutro"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
-              :class="{ 'border-red-500': tipo === 'outro' && !tipoOutro && submitted }"
-              placeholder="Digite o tipo de ocorrência"
-            />
-            <p v-if="tipo === 'outro' && !tipoOutro && submitted" class="mt-1 text-sm text-red-500">
-              Este campo é obrigatório
-            </p>
-          </div>
-
-          <div class="mb-4">
-            <label for="status" class="block text-sm font-medium text-gray-700 mb-1">Status</label>
-            <select
-              id="status"
-              v-model="status"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
-            >
-              <option value="">Selecione o status</option>
-              <option value="pendente">Pendente</option>
-              <option value="análise">Em Análise</option>
-              <option value="concluído">Concluído</option>
-              <option value="em andamento">Em Andamento</option>
             </select>
           </div>
 
@@ -574,18 +461,6 @@ const downloadDocument = async (doc) => {
               id="descricao"
               v-model="descricao"
               rows="4"
-              disabled
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
-              placeholder="Digite a descrição da ocorrência"
-            ></textarea>
-          </div>
-
-          <div class="mb-6">
-            <label for="parecer" class="block text-sm font-medium text-gray-700 mb-1">Escreva o parecer da ocorrência</label>
-            <textarea
-              id="parecer"
-              v-model="opinion"
-              rows="4"
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-700"
               placeholder="Digite a descrição da ocorrência"
             ></textarea>
@@ -674,32 +549,20 @@ const downloadDocument = async (doc) => {
         <div class="bg-white rounded-lg shadow-md p-6">
           <h2 class="text-xl font-bold mb-4 text-green-800">Mapa</h2>
           <!-- Add your map component here -->
-          <div class="border-2 border-green-700 rounded-lg h-[calc(100vh-100px)]" 
-               :class="{ 'border-red-500': !geometry && submitted }">
+          <div class="h-[600px] bg-gray-100 rounded-lg flex items-center justify-center">
+      <!--      <ReadOnlyMap :ocorrencias="[ocorrencia]" /> -->
             <InteractiveMap 
-              @point-added="handlePointAdded"
-              @polygon-added="handlePolygonAdded"
-            />
-            <p v-if="!geometry && submitted" class="mt-1 text-sm text-red-500">
-              Adicione um ponto ou polígono no mapa
-            </p>
+            :ocorrencias="[ocorrencia]"
+            @point-added="handlePointAdded"
+            @polygon-added="handlePolygonAdded"
+
+          />
           </div>
         </div>
 
         <div class="lg:col-span-2">
-          <Button 
-            @click="handleSalvar" 
-            class="w-full bg-green-700 hover:bg-green-800 text-white"
-            :disabled="isLoading"
-          >
-            <span v-if="isLoading" class="flex items-center justify-center">
-              <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Salvando...
-            </span>
-            <span v-else>Salvar Alterações</span>
+          <Button @click="handleSalvar" class="w-full bg-green-700 hover:bg-green-800 text-white">
+            Salvar Ocorrência
           </Button>
         </div>
       </div>

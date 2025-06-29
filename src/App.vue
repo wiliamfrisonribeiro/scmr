@@ -1,9 +1,11 @@
 <script setup lang="ts">
-
+import { RouterView } from 'vue-router'
+import PWAInstall from '@/components/PWAInstall.vue'
 </script>
 
 <template>
-  <router-view />
+  <RouterView />
+  <PWAInstall />
 </template> 
 
 <style scoped>

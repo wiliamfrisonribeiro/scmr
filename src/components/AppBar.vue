@@ -25,6 +25,10 @@ const handleSettings = () => {
   console.log('Settings clicked');
 };
 
+const navigateToHome = () => {
+  router.push('/');
+};
+
 const toggleUserMenu = () => {
   showUserMenu.value = !showUserMenu.value;
 };
@@ -50,7 +54,13 @@ onUnmounted(() => {
   <header class="bg-white shadow-md">
     <div class="container mx-auto px-4 py-4">
       <div class="flex items-center justify-between">
-        <h1 class="text-xl font-bold text-green-800">SCMR</h1>
+        <h1 
+          class="text-xl font-bold text-green-800 cursor-pointer hover:text-green-600 transition-colors"
+          @click="navigateToHome"
+          title="Ir para página inicial"
+        >
+          SCMR
+        </h1>
         
         <div class="flex items-center gap-4">
           <!-- Menu do usuário -->

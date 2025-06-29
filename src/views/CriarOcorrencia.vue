@@ -9,7 +9,7 @@ import { useUser } from '@/composables/useUser';
 import ValidationModal from '@/components/ValidationModal.vue';
 
 const router = useRouter();
-const { userAccountId } = useUser();
+const { userAccountId, isAuthority } = useUser();
 const token = ref('');
 const titulo = ref('');
 const descricao = ref('');
@@ -32,6 +32,13 @@ onMounted(() => {
     token.value = storedToken;
   } else {
     router.push('/login');
+    return;
+  }
+
+  // Verificar se o usuário é autoridade
+  if (isAuthority.value) {
+    router.push('/dashboard');
+    return;
   }
 });
 

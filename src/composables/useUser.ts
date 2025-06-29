@@ -5,6 +5,12 @@ interface UserData {
   name: string;
   email: string;
   account_id: number;
+  account_group_id?: string;
+  account_group?: {
+    id: string;
+    name: string;
+    description: string;
+  };
 }
 
 const userData = ref<UserData | null>(null);
@@ -32,9 +38,13 @@ export function useUser() {
         id: decoded.data.id,
         name: decoded.data.name,
         email: decoded.data.email,
-        account_id: decoded.data.account_id
+        account_id: decoded.data.account_id,
+        account_group_id: decoded.data.account_group_id,
+        account_group: decoded.data.account_group
       };
       userData.value = user;
+
+      console.log("userData", userData.value);
       // Salvar no localStorage
       localStorage.setItem('userData', JSON.stringify(user));
     }
@@ -57,6 +67,8 @@ export function useUser() {
   const userName = computed(() => userData.value?.name);
   const userEmail = computed(() => userData.value?.email);
   const userAccountId = computed(() => userData.value?.id);
+  const userAccountGroup = computed(() => userData.value?.account_group);
+  const isAuthority = computed(() => userData.value?.account_group_id === 'b9e4f4b8-57cc-43a7-8a54-ebc498bbc58c');
 
   return {
     userData,
@@ -64,6 +76,8 @@ export function useUser() {
     userName,
     userEmail,
     userAccountId,
+    userAccountGroup,
+    isAuthority,
     setUserFromToken,
     clearUser
   };

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { MapPin, FileText, BarChart2, Users, Calendar, ChevronRight, Info, BarChart3, BarChart4 } from 'lucide-vue-next';
 import { fetchOcorrenciasAll, fetchOcorrenciasStatus } from '@/services/ocorrencias/ocorrencias';
 import ReadOnlyMap from '@/components/ReadOnlyMap.vue';
-
+import { getAllAccounts } from '@/services/auth/accountService';
 const router = useRouter();
 
 const ocorrencias = ref([])
@@ -14,6 +14,8 @@ const totalOcorrencias = ref(0)
 const totalOcorrenciasPendentes = ref(0)
 const totalOcorrenciasEmAndamento = ref(0)
 const totalOcorrenciasConcluidas = ref(0)
+const selectedOcorrencia = ref<UltimaOcorrencia | OcorrenciaEmAnalise | null>(null); // Ocorrência selecionada para zoom
+
 const navigateToDashboard = () => {
   router.push('/dashboard');
 };
@@ -26,11 +28,16 @@ const navigateToLogin = () => {
   router.push('/login');
 };
 
+const formatDate = (date: string) => {
+  if (!date) return '-';
+  return new Date(date).toLocaleString('pt-BR');
+};
+
 // Dados de exemplo para as estatísticas
 const estatisticas = ref([
   { id: 1, titulo: 'Ocorrências Registradas', valor: '1.245', icone: MapPin, cor: 'bg-green-700' },
 
-  { id: 3, titulo: 'Análises Realizadas', valor: '432', icone: BarChart2, cor: 'bg-green-800' },
+  { id: 3, titulo: 'Em Análise', valor: '432', icone: BarChart2, cor: 'bg-green-800' },
   { id: 4, titulo: 'Pendentes', valor: '78', icone: BarChart3, cor: 'bg-green-500' },
   { id: 5, titulo: 'Em andamento', valor: '78', icone: BarChart4, cor: 'bg-green-500' },
   { id: 6, titulo: 'Concluídas', valor: '78', icone: BarChart4, cor: 'bg-green-500' },
@@ -38,7 +45,15 @@ const estatisticas = ref([
 ]);
 
 // Dados de exemplo para as últimas ocorrências
-const ultimasOcorrencias = ref([
+interface UltimaOcorrencia {
+  id: number;
+  titulo: string;
+  data: string;
+  local: string;
+  status: string;
+}
+
+const ultimasOcorrencias = ref<UltimaOcorrencia[]>([
   { 
     id: 1, 
     titulo: 'Desmatamento em Área Protegida', 
@@ -94,12 +109,24 @@ const proximosEventos = ref([
   },
 ]);
 
+// Dados de exemplo para os próximos eventos
+interface OcorrenciaEmAnalise {
+  id: number;
+  titulo: string;
+  data: string;
+  local: string;
+  status: string;
+  opinion: string;
+}
+
+const ocorrenciasEmAnalise = ref<OcorrenciaEmAnalise[]>([]);
+
 // Dados de exemplo para a seção Sobre
 const sobreNos = ref({
-  titulo: 'Sobre o Sistema de Monitoramento',
-  descricao: 'O Sistema de Monitoramento de Ocorrências é uma plataforma colaborativa desenvolvida para facilitar o registro, acompanhamento e análise de situações críticas no meio rural em todo o território nacional.',
-  missao: 'Nossa missão é fornecer uma ferramenta eficiente para o registro e monitoramento de ocorrências no meio rural, como alagamentos, incêndios e infestações de pragas. Nosso objetivo é promover a transparência e a participação cidadã na identificação e combate a esses desafios.',
-  visao: 'Nossa missão é fornecer uma ferramenta eficiente para o registro e monitoramento de ocorrências no meio rural, como alagamentos, incêndios e infestações de pragas. Ao fazer isso, almejamos ser referência nacional em sistemas de monitoramento e colaborativo, contribuindo significativamente para a preservação dos recursos naturais e o desenvolvimento sustentável das comunidades rurais e do país',
+  titulo: 'Sobre o Sistema de Controle',
+  descricao: 'O Sistema de Controle de Ocorrências é uma plataforma colaborativa desenvolvida para facilitar o registro, acompanhamento e análise de situações críticas no meio rural em todo o território nacional.',
+  missao: 'Nossa missão é fornecer uma ferramenta eficiente para o registro e Controle de ocorrências no meio rural, como alagamentos, incêndios e infestações de pragas. Nosso objetivo é promover a transparência e a participação cidadã na identificação e combate a esses desafios.',
+  visao: 'Nossa missão é fornecer uma ferramenta eficiente para o registro e Controle de ocorrências no meio rural, como alagamentos, incêndios e infestações de pragas. Ao fazer isso, almejamos ser referência nacional em sistemas de controle e colaborativo, contribuindo significativamente para a preservação dos recursos naturais e o desenvolvimento sustentável das comunidades rurais e do país',
   valores: [
     'Transparência',
     'Colaboração',
@@ -115,7 +142,8 @@ const filterOcorrencias = async () => {
       
     const response = await fetchOcorrenciasAll();
     ocorrencias.value = response.data;
-    const ocorrenciasUltimas: any[] = [];
+    const ocorrenciasUltimas: UltimaOcorrencia[] = [];
+    const ocorrenciasAnalise: OcorrenciaEmAnalise[] = [];
     
     if (response.data && response.data.length > 0) {
       const ocorrencias = response.data;
@@ -123,7 +151,7 @@ const filterOcorrencias = async () => {
       
       ocorrencias.forEach((ocorrencia: any, index: number) => {
         if (index < 4) {
-          const ocorrenciaUltima = {
+          const ocorrenciaUltima: UltimaOcorrencia = {
             id: ocorrencia.id,
             titulo: ocorrencia.type,
             data: formatDate(ocorrencia.created_date),
@@ -132,11 +160,26 @@ const filterOcorrencias = async () => {
           };
           ocorrenciasUltimas.push(ocorrenciaUltima);
         }
+        
+        // Filtrar ocorrências em análise
+        if (ocorrencia.ocurrency_status === 'análise') {
+          const ocorrenciaAnalise: OcorrenciaEmAnalise = {
+            id: ocorrencia.id,
+            titulo: ocorrencia.type,
+            data: formatDate(ocorrencia.created_date),
+            local: ocorrencia.description,
+            status: ocorrencia.ocurrency_status,
+            opinion: ocorrencia.opinion || 'Aguardando análise'
+          };
+          ocorrenciasAnalise.push(ocorrenciaAnalise);
+        }
       });
       
       ultimasOcorrencias.value = ocorrenciasUltimas;
+      ocorrenciasEmAnalise.value = ocorrenciasAnalise.slice(0, 4); // Limitar a 4 ocorrências
 
       console.log(ocorrenciasUltimas)
+      console.log('Ocorrências em análise:', ocorrenciasAnalise)
 
       estatisticas.value[0].valor = totalOcorrencias.value.toString();
 
@@ -180,8 +223,26 @@ const fetchOcorrenciasConcluidas = async () => {
   estatisticas.value[4].valor = totalOcorrenciasConcluidas.value.toString();
 }
 
+const fetchTotalUsuarios = async () => {
+  const response = await getAllAccounts();
+  console.log("totalUsuarios", response)
+  const total = response.total;
+  
+  estatisticas.value[5].valor = total;
 
+}
 
+// Função para lidar com a seleção de ocorrência para zoom
+const handleOcorrenciaSelected = (ocorrencia: any) => {
+  selectedOcorrencia.value = ocorrencia;
+  console.log('Ocorrência selecionada para zoom:', ocorrencia);
+  
+  // Scroll suave para o mapa
+  const mapaSection = document.getElementById('mapa');
+  if (mapaSection) {
+    mapaSection.scrollIntoView({ behavior: 'smooth' });
+  }
+};
 
 onMounted(async () => {
   try {
@@ -190,6 +251,7 @@ onMounted(async () => {
  await fetchOcorrencasPendentes();
  await fetchOcorrenciasEmAndamento();
  await fetchOcorrenciasConcluidas();
+ await fetchTotalUsuarios();
   } finally {
     isLoading.value = false;
   }
@@ -199,12 +261,6 @@ onMounted(async () => {
 watch(ultimasOcorrencias, (newVal) => {
   console.log(newVal)
 })
-
-const formatDate = (date: string) => {
-  if (!date) return '-';
-  return new Date(date).toLocaleString('pt-BR');
-};
-
 </script>
 
 <template>
@@ -234,7 +290,7 @@ const formatDate = (date: string) => {
     <!-- Banner principal -->
     <section id="inicio" class="hero-banner">
       <div class="hero-content">
-        <h2> Sistema Colaborativo para monitoramento de situações críticas no meio rural</h2>
+        <h2> Sistema Colaborativo para Controle de situações críticas no meio rural</h2>
         <p>Sistema integrado para registro, acompanhamento e análise de ocorrências o meio rural em todo o território nacional.</p>
         <div class="hero-buttons">
           <Button 
@@ -269,27 +325,42 @@ const formatDate = (date: string) => {
    
 
     <!-- Conteúdo principal -->
-    <main id="ocorrencias" class="main-content">
+    <main id="ocorrencias" class="main-content flex flex-col gap-4">
       <div class="content-grid">
+        <!-- Instrução para o usuário -->
+        <div class="col-span-full mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+          <div class="flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-blue-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span class="text-blue-800 text-sm">
+              <strong>Dica:</strong> Clique em qualquer ocorrência para localizá-la no mapa abaixo
+            </span>
+          </div>
+        </div>
+        
         <!-- Últimas ocorrências -->
         <section class="content-card">
           <div class="card-header">
             <h2>Últimas Ocorrências</h2>
-            <Button variant="ghost" size="sm" class="view-all">
-              Ver todas <ChevronRight class="h-4 w-4" />
-            </Button>
+          
           </div>
-          <div class="card-content">
+          <div class="card-content ">
             <div v-if="isLoading" class="loading-container">
               <div class="loading-spinner"></div>
               <p class="loading-text">Carregando ocorrências...</p>
             </div>
             <div v-else>
-              <div v-for="ocorrencia in ultimasOcorrencias" :key="ocorrencia.id" class="list-item">
+              <div v-for="ocorrencia in ultimasOcorrencias" :key="ocorrencia.id" 
+                   class="list-item cursor-pointer hover:bg-gray-50 transition-colors"
+                   @click="handleOcorrenciaSelected(ocorrencia)"
+                   :class="{
+                     'bg-blue-50 border-l-4 border-blue-500 !rounded-none !mx-[-1rem]': selectedOcorrencia && selectedOcorrencia.id === ocorrencia.id
+                   }">
                 <div class="item-icon">
                   <MapPin class="h-5 w-5 text-blue-500" />
                 </div>
-                <div class="item-details">
+                <div class="item-details flex-1">
                   <h3 class="item-title">{{ ocorrencia.titulo }}</h3>
                   <p class="item-location">{{ ocorrencia.local }}</p>
                   <div class="item-meta">
@@ -299,6 +370,10 @@ const formatDate = (date: string) => {
                     </span> 
                   </div>
                 </div>
+                <div class="flex items-center gap-1 text-blue-600 hover:text-blue-800 ml-2" title="Clique para localizar no mapa">
+                  <MapPin class="h-4 w-4" />
+                  <span class="text-xs">Localizar</span>
+                </div>
               </div>
             </div>
           </div>
@@ -307,23 +382,40 @@ const formatDate = (date: string) => {
         <!-- Próximos eventos -->
         <section class="content-card">
           <div class="card-header">
-            <h2>Ultimas ocorrências Analisadas</h2>
-            <Button variant="ghost" size="sm" class="view-all">
-              Ver todos <ChevronRight class="h-4 w-4" />
-            </Button>
+            <h2>Últimas Ocorrências em Análise</h2>
+      
           </div>
           <div class="card-content">
-            <div v-for="evento in proximosEventos" :key="evento.id" class="list-item">
+            <div v-if="ocorrenciasEmAnalise.length === 0" class="text-center py-8 text-gray-500">
+              <BarChart2 class="h-12 w-12 mx-auto mb-2 text-gray-300" />
+              <p>Nenhuma ocorrência em análise no momento</p>
+            </div>
+            <div v-else v-for="ocorrencia in ocorrenciasEmAnalise" :key="ocorrencia.id" 
+                 class="list-item cursor-pointer hover:bg-gray-50 transition-colors"
+                 @click="handleOcorrenciaSelected(ocorrencia)"
+                 :class="{
+                   'bg-blue-50 border-l-4 border-blue-500 !rounded-none !mx-[-1rem]': selectedOcorrencia && selectedOcorrencia.id === ocorrencia.id
+                 }">
               <div class="item-icon">
-                <Calendar class="h-5 w-5 text-green-500" />
+              
+                  <MapPin class="h-5 w-5 text-blue-500" />
+                
+          
               </div>
-              <div class="item-details">
-                <h3 class="item-title">{{ evento.titulo }}</h3>
-                <p class="item-location">{{ evento.local }}</p>
+              <div class="item-details flex-1">
+                <h3 class="item-title">{{ ocorrencia.titulo }}</h3>
+                <p class="item-location">{{ ocorrencia.local }}</p>
                 <div class="item-meta">
-                  <span class="item-date">{{ evento.data }}</span>
-                  <span class="item-type">{{ evento.tipo }}</span>
+                  <span class="item-date">{{ ocorrencia.data }}</span>
+                  <span class="item-status status-em-análise">{{ ocorrencia.status }}</span>
                 </div>
+                <p v-if="ocorrencia.opinion && ocorrencia.opinion !== 'Aguardando análise'" class="text-xs text-gray-600 mt-1">
+                  <strong>Análise:</strong> {{ ocorrencia.opinion }}
+                </p>
+              </div>
+              <div class="flex items-center gap-1 text-blue-600 hover:text-blue-800 ml-2" title="Clique para localizar no mapa">
+                <MapPin class="h-4 w-4" />
+                <span class="text-xs">Localizar</span>
               </div>
             </div>
           </div>
@@ -339,12 +431,34 @@ const formatDate = (date: string) => {
           <h2 class="section-title">Mapa de Ocorrências</h2>
           <p class="section-description">Visualize todas as ocorrências registradas no sistema</p>
         </div>
+        
+        <!-- Indicador de ocorrência selecionada -->
+        <div v-if="selectedOcorrencia" class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span class="text-blue-800 font-medium">Visualizando: {{ selectedOcorrencia.titulo }}</span>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm"
+              @click="selectedOcorrencia = null"
+              class="text-blue-600 hover:text-blue-800"
+            >
+              Limpar Seleção
+            </Button>
+          </div>
+        </div>
+        
           <div class="map-wrapper">
             <div v-if="isLoading" class="loading-container">
               <div class="loading-spinner"></div>
               <p class="loading-text">Carregando mapa...</p>
             </div>
-            <ReadOnlyMap v-else :ocorrencias="ocorrencias" />
+            <ReadOnlyMap v-else :ocorrencias="ocorrencias" :selectedOcorrencia="selectedOcorrencia" />
         </div>
       </div>
     </section>
@@ -395,7 +509,7 @@ const formatDate = (date: string) => {
         <div class="footer-logo">
        
           <p class="footer-description">
-            Sistema Colaborativo de Monitoramento de situações críticas no meio rural
+            Sistema Colaborativo de Controle de situações críticas no meio rural
           </p>
         </div>
         <div class="footer-links">
@@ -420,7 +534,7 @@ const formatDate = (date: string) => {
         </div>
       </div>
       <div class="footer-bottom">
-        <p>&copy; 2025 Sistema Colaborativo de Monitoramento de situações críticas no meio rural. Todos os direitos reservados.</p>
+        <p>&copy; 2025 Sistema Colaborativo de Controle de situações críticas no meio rural. Todos os direitos reservados.</p>
       </div>
     </footer>
   </div>
@@ -595,7 +709,7 @@ const formatDate = (date: string) => {
   max-width: 1280px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
   gap: 2rem;
 }
 

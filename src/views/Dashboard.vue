@@ -7,7 +7,7 @@ import ReadOnlyMap from '@/components/ReadOnlyMap.vue';
 import InfoCards from '@/components/InfoCards.vue';
 import EventCards from '@/components/EventCards.vue';
 import { Button } from '@/components/ui/button';
-import { fetchOcorrencias, fetchOcorrenciasAllUser } from '@/services/ocorrencias/ocorrencias.ts';
+import { fetchOcorrencias, fetchOcorrenciasAllUser, fetchOcorrenciasForAuthority } from '@/services/ocorrencias/ocorrencias.ts';
 import Ocorrencias from '@/components/Ocorrencias.vue';
 import { useUser } from '@/composables/useUser';
 
@@ -20,6 +20,7 @@ const loadingOcorrencias = ref(false);
 const totalOcorrencias = ref(0);
 const totalAnalisadas = ref(0);
 const selectedStatus = ref('todos');
+const selectedOcorrencia = ref(null); // Ocorrência selecionada para zoom
 
 const statusOptions = [
   { value: 'todos', label: 'Todos' },
@@ -29,15 +30,22 @@ const statusOptions = [
   { value: 'concluído', label: 'Concluído' }
 ];
 
-const { userAccountId } = useUser();
+const { userAccountId, isAuthority } = useUser();
 
 async function loadOcorrencias() {
   loadingOcorrencias.value = true;
-  const response = await fetchOcorrencias(page.value, pageSize, userAccountId.value, selectedStatus.value);
-  //await fetchOcorrenciasAllUser();
+  
+  let response;
+  if (isAuthority.value) {
+    // Para usuários do tipo Autoridade, buscar todas as ocorrências
+    response = await fetchOcorrenciasForAuthority(page.value, pageSize, selectedStatus.value);
+  } else {
+    // Para outros usuários, buscar apenas suas próprias ocorrências
+    response = await fetchOcorrencias(page.value, pageSize, userAccountId.value, selectedStatus.value);
+  }
+  
   ocorrencias.value = response.data;
-
-  console.log("ocorrencias", ocorrencias.value)
+  console.log("ocorrencias", ocorrencias.value);
   totalPages.value = Math.max(1, Math.ceil((response.total || 0) / pageSize));
   loadingOcorrencias.value = false;
 }
@@ -62,14 +70,27 @@ const formatDate = (date) => {
 };
 
 const fetchOcorrenciasTotalOcorrencias = async () => {
+  let response;
   
-  const response = await fetchOcorrenciasAllUser(userAccountId.value);
+  if (isAuthority.value) {
+    // Para usuários do tipo Autoridade, buscar todas as ocorrências
+    response = await fetchOcorrenciasForAuthority(1, 10000, 'todos');
+  } else {
+    // Para outros usuários, buscar apenas suas próprias ocorrências
+    response = await fetchOcorrenciasAllUser(userAccountId.value);
+  }
   
   totalOcorrencias.value = response.total;
 
   const ocorrenciasAnalisadas = response.data.filter(ocorrencia => ocorrencia.ocurrency_status === 'análise');
   totalAnalisadas.value = ocorrenciasAnalisadas.length;
 }
+
+// Função para lidar com a seleção de ocorrência
+const handleOcorrenciaSelected = (ocorrencia) => {
+  selectedOcorrencia.value = ocorrencia;
+  console.log('Ocorrência selecionada para zoom:', ocorrencia);
+};
 
 onMounted(() => {
   fetchOcorrenciasTotalOcorrencias();
@@ -81,6 +102,10 @@ watch([page, selectedStatus], () => {
   loadOcorrencias();
 });
 
+// Limpar ocorrência selecionada quando mudar de página ou filtro
+watch([page, selectedStatus], () => {
+  selectedOcorrencia.value = null;
+});
 </script>
 
 <template>
@@ -96,12 +121,43 @@ watch([page, selectedStatus], () => {
               Este é o painel de controle do sistema. Aqui você pode visualizar informações importantes e gerenciar seus
               dados.
             </p>
-            <Button @click="handleRegister" class="bg-green-700 hover:bg-green-800 text-white">
+            <div v-if="isAuthority" class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+              <div class="flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span class="text-blue-800 font-medium">Modo Autoridade</span>
+              </div>
+              <p class="text-blue-700 text-sm mt-1">Visualizando todas as ocorrências registradas no sistema.</p>
+              <p class="text-blue-600 text-sm mt-2">Como autoridade, você pode visualizar e analisar ocorrências, mas não pode registrá-las.</p>
+            </div>
+            <Button v-if="!isAuthority" @click="handleRegister" class="bg-green-700 hover:bg-green-800 text-white">
               Nova Ocorrência
             </Button>
           </div>
 
           <div class="map-container">
+            <!-- Indicador de ocorrência selecionada -->
+            <div v-if="selectedOcorrencia" class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span class="text-blue-800 font-medium">Visualizando: {{ selectedOcorrencia.type }}</span>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  @click="selectedOcorrencia = null"
+                  class="text-blue-600 hover:text-blue-800"
+                >
+                  Limpar Seleção
+                </Button>
+              </div>
+            </div>
+            
             <div v-if="loadingOcorrencias" class="flex justify-center items-center py-8">
               <svg class="animate-spin h-6 w-6 text-green-700 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none"
                 viewBox="0 0 24 24">
@@ -119,7 +175,7 @@ watch([page, selectedStatus], () => {
               <p class="text-gray-600 text-lg font-medium">Nenhuma ocorrência encontrada</p>
               <p class="text-gray-500 text-sm mt-2">Tente alterar os filtros ou criar uma nova ocorrência</p>
             </div>
-            <ReadOnlyMap v-else :ocorrencias="ocorrencias" />
+            <ReadOnlyMap v-else :ocorrencias="ocorrencias" :selectedOcorrencia="selectedOcorrencia" />
           </div>
         </div>
         <!-- Coluna lateral -->
@@ -148,8 +204,13 @@ watch([page, selectedStatus], () => {
               Próximo
             </button>
           </div>
-          <Ocorrencias :ocorrencias="ocorrencias" :loadOcorrencias="loadOcorrencias"
-            :loadingOcorrencias="loadingOcorrencias" />
+          <Ocorrencias 
+            :ocorrencias="ocorrencias" 
+            :loadOcorrencias="loadOcorrencias"
+            :loadingOcorrencias="loadingOcorrencias" 
+            :selectedOcorrencia="selectedOcorrencia"
+            @ocorrencia-selected="handleOcorrenciaSelected"
+          />
         </div>
       </div>
     </main>

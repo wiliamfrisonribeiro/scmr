@@ -84,3 +84,21 @@ export async function fetchOcorrenciasStatus(status: string) {
   return data
 
 }
+
+export async function fetchOcorrenciasForAuthority(page = 1, pageSize = 5, status = 'todos') {
+  const paginate = createPaginate()
+    .page(page)
+    .limit(pageSize)
+    .sort('-created_date');
+
+  if (status !== 'todos') {
+    paginate.equalsAnd('ocurrency_status', status);
+  }
+
+  const url = paginate.buildUrl('https://smrc.onrender.com/ocurrencies');
+
+  const response = await fetch(url);
+  const data = await response.json();
+
+  return data;
+}
